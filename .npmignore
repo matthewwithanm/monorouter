@@ -1,0 +1,7 @@
+/node_modules/
+/test/
+/vendor/
+/bower.json
+/.editorconfig
+/.jshintrc
+/standalone/

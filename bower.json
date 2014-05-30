@@ -1,0 +1,26 @@
+{
+  "name": "react-routing",
+  "version": "0.0.0",
+  "authors": [
+    "Matthew Dapena-Tretter <m@tthewwithanm.com>"
+  ],
+  "description": "A React Application component",
+  "main": "./standalone/react-routing.js",
+  "keywords": [
+    "react-component",
+    "react",
+    "application",
+    "router",
+    "routing",
+    "component"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/matthewwithanm/react-routing",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ]
+}

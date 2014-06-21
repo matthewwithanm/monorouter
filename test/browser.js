@@ -1,6 +1,9 @@
 var assert = chai.assert;
-var noop = function() {};
 var Route = ReactRouting.Route;
+var noop = function() {};
+var dummy = function() {
+  return React.DOM.div();
+};
 
 
 describe('react-routing', function() {
@@ -20,6 +23,20 @@ describe('react-routing', function() {
       Router.routes.forEach(function(route) {
         assert.instanceOf(route, Route);
       });
+    });
+
+  });
+
+  describe('Router', function() {
+
+    it('matches routes', function(done) {
+      var Router = ReactRouting.createRouterClass();
+      Router.route('animals/:type', function(req) {
+        assert.equal(req.params.type, 'dog');
+        done();
+      });
+      var router = new Router({path: '/animals/dog', view: dummy});
+      React.renderComponentToString(router);
     });
 
   });

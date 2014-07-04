@@ -34,7 +34,9 @@ describe('react-routing', function() {
         assert.equal(this.params.type, 'dog');
         done();
       });
-      Router.renderToString({path: '/animals/dog'}, noop);
+      Router.dispatch('/animals/dog', function(err) {
+        if (err) done(err);
+      });
     });
 
   });

@@ -39,5 +39,26 @@ describe('react-routing', function() {
       });
     });
 
+    it('throws Unhandled errors for…um, unhandled URLs', function(done) {
+      var Router = ReactRouting.createRouterClass();
+      Router.dispatch('/animals/dog', function(err) {
+        assert(err);
+        assert.equal(err.name, 'Unhandled');
+        done();
+      });
+    });
+
+    it('throws Unhandled errors when we explicitly choose not to handle', function(done) {
+      var Router = ReactRouting.createRouterClass();
+      Router.route('animals/:type', function() {
+        this.unhandled();
+      });
+      Router.dispatch('/animals/dog', function(err) {
+        assert(err);
+        assert.equal(err.name, 'Unhandled');
+        done();
+      });
+    });
+
   });
 });

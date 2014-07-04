@@ -6,6 +6,7 @@
   "indent": 2,
   "eqnull": true,
   "strict": false,
+  "loopfunc": true,
   "globals": {
     "ActiveXObject": true
   }

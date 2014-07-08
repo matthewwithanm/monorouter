@@ -3,7 +3,6 @@ var
   gutil = require('gulp-util'),
   browserify = require('gulp-browserify'),
   rename = require('gulp-rename'),
-  connect = require('gulp-connect'),
   gbump = require('gulp-bump');
 
 
@@ -33,17 +32,4 @@ gulp.task('build:browser', function() {
 });
 
 
-// A server for the test page
-gulp.task('testserver', connect.server({
-  root: [__dirname],
-  port: 1337,
-  livereload: false,
-  open: {
-    file: 'test/index.html',
-    browser: 'Google Chrome'
-  }
-}));
-
-
-gulp.task('test', ['build:browser', 'testserver']);
 gulp.task('build', ['build:browser']);

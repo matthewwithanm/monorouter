@@ -52,6 +52,10 @@ gulp.task('build:tests', function() {
     .pipe(gulp.dest('./.tests-built/'));
 });
 
+gulp.task('watch:tests', function() {
+  gulp.watch('./lib/**/*', ['build:tests']);
+});
+
 gulp.task('watch:examples', function () {
   webpack(examplesWebpackConfig).watch(200, function(err, stats) {
     if (err) throw err;

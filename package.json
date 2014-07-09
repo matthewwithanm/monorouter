@@ -22,7 +22,8 @@
     "jest-cli": "~0.1.17",
     "webpack": "^1.3.1-beta4",
     "jsx-loader": "^0.10.2",
-    "imports-loader": "^0.6.3"
+    "imports-loader": "^0.6.3",
+    "express": "^4.5.1"
   },
   "peerDependencies": {
     "react": "*"

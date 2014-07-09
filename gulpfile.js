@@ -4,6 +4,7 @@ var
   browserify = require('gulp-browserify'),
   rename = require('gulp-rename'),
   gbump = require('gulp-bump'),
+  jasmine = require('gulp-jasmine'),
   webpack = require('webpack'),
   examplesWebpackConfig = require('./examples/webpack.config');
 
@@ -47,6 +48,12 @@ gulp.task('watch:examples', function () {
     if (err) throw err;
     console.log(stats.toString({colors: true, chunks: false}));
   });
+});
+
+
+gulp.task('test', function() {
+  gulp.src('./lib/**/__tests__/*.js')
+    .pipe(jasmine());
 });
 
 

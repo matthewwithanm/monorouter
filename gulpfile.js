@@ -3,7 +3,9 @@ var
   gutil = require('gulp-util'),
   browserify = require('gulp-browserify'),
   rename = require('gulp-rename'),
-  gbump = require('gulp-bump');
+  gbump = require('gulp-bump'),
+  webpack = require('webpack'),
+  examplesWebpackConfig = require('./examples/webpack.config');
 
 
 gulp.task('watch', function() {
@@ -29,6 +31,22 @@ gulp.task('build:browser', function() {
     }))
     .pipe(rename('react-routing.js'))
     .pipe(gulp.dest('./standalone/'));
+});
+
+
+gulp.task('build:examples', function() {
+  webpack(examplesWebpackConfig).run(function(err, stats) {
+    if (err) throw err;
+    console.log(stats.toString({colors: true, chunks: false}));
+  });
+});
+
+
+gulp.task('watch:examples', function () {
+  webpack(examplesWebpackConfig).watch(200, function(err, stats) {
+    if (err) throw err;
+    console.log(stats.toString({colors: true, chunks: false}));
+  });
 });
 
 

@@ -4,7 +4,7 @@ var
   browserify = require('gulp-browserify'),
   rename = require('gulp-rename'),
   gbump = require('gulp-bump'),
-  jasmine = require('gulp-jasmine'),
+  jasmine = require('jasmine-runner-node'),
   webpack = require('webpack'),
   examplesWebpackConfig = require('./examples/webpack.config');
 
@@ -43,6 +43,15 @@ gulp.task('build:examples', function() {
 });
 
 
+gulp.task('build:tests', function() {
+  gulp.src('./lib/**/__tests__/*.js')
+    .pipe(browserify({
+      insertGlobals : true,
+      debug : !gulp.env.production
+    }))
+    .pipe(gulp.dest('./.tests-built/'));
+});
+
 gulp.task('watch:examples', function () {
   webpack(examplesWebpackConfig).watch(200, function(err, stats) {
     if (err) throw err;
@@ -51,10 +60,13 @@ gulp.task('watch:examples', function () {
 });
 
 
-gulp.task('test', function() {
-  gulp.src('./lib/**/__tests__/*.js')
-    .pipe(jasmine());
+gulp.task('test', ['build:tests'], function() {
+  jasmine.start({
+    port: 8888,
+    files: {
+      spec: './.tests-built/**/*.js'
+    }
+  });
 });
-
 
 gulp.task('build', ['build:browser']);

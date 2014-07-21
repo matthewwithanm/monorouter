@@ -27,10 +27,10 @@ gulp.task('bump:patch', function() { bump('patch'); });
 gulp.task('build:browser', function() {
   gulp.src('./lib/index.js')
     .pipe(browserify({
-      standalone: 'ReactRouting',
+      standalone: 'monorouter',
       transform: ['browserify-shim']
     }))
-    .pipe(rename('react-routing.js'))
+    .pipe(rename('monorouter.js'))
     .pipe(gulp.dest('./standalone/'));
 });
 

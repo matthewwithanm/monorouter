@@ -1,7 +1,7 @@
-var ReactRouting = require('../../lib');
+var monorouter = require('../../lib');
 var App = require('../build/server');
 
-var Router = ReactRouting.createRouterClass();
+var Router = monorouter.createRouterClass();
 Router
   .route({
     name: 'index',

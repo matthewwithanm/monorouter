@@ -1,5 +1,5 @@
 {
-  "name": "react-routing",
+  "name": "monorouter",
   "version": "0.0.0",
   "description": "A React Application component",
   "main": "./lib/index.js",
@@ -36,7 +36,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git://github.com/matthewwithanm/react-routing.git"
+    "url": "git://github.com/matthewwithanm/monorouter.git"
   },
   "keywords": [
     "react-component",
@@ -49,7 +49,7 @@
   "author": "Matthew Dapena-Tretter <m@tthewwithanm.com>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/matthewwithanm/react-routing/issues"
+    "url": "https://github.com/matthewwithanm/monorouter/issues"
   },
   "browserify-shim": {
     "react": "global:React"

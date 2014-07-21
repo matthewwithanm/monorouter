@@ -1,11 +1,11 @@
 {
-  "name": "react-routing",
+  "name": "monorouter",
   "version": "0.0.0",
   "authors": [
     "Matthew Dapena-Tretter <m@tthewwithanm.com>"
   ],
   "description": "A React Application component",
-  "main": "./standalone/react-routing.js",
+  "main": "./standalone/monorouter.js",
   "keywords": [
     "react-component",
     "react",
@@ -15,7 +15,7 @@
     "component"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/matthewwithanm/react-routing",
+  "homepage": "https://github.com/matthewwithanm/monorouter",
   "ignore": [
     "**/.*",
     "node_modules",

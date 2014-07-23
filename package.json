@@ -35,6 +35,9 @@
     "prepublish": "gulp build",
     "test": "gulp test"
   },
+  "publishConfig": {
+    "registry": "http://npmregistry.hzdg.com"
+  },
   "repository": {
     "type": "git",
     "url": "git://github.com/matthewwithanm/monorouter.git"

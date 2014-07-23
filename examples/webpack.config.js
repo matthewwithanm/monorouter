@@ -16,6 +16,7 @@ function buildEntries() {
 module.exports = {
   context: __dirname,
   entry: buildEntries(),
+  externals: ['react'],
 
   output: {
     filename: '[name].js',

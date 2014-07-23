@@ -1,5 +1,5 @@
 var express = require('express');
-var routerMiddleware = require('../../lib/contrib/connectMiddleware');
+var routerMiddleware = require('connect-monorouter');
 var Router = require('./router');
 
 port = process.env.PORT || 5000;

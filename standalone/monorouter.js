@@ -1,5 +1,4 @@
 !function(e){if("object"==typeof exports)module.exports=e();else if("function"==typeof define&&define.amd)define(e);else{var o;"undefined"!=typeof window?o=window:"undefined"!=typeof global?o=global:"undefined"!=typeof self&&(o=self),o.monorouter=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(_dereq_,module,exports){
-var Unhandled = _dereq_('./errors/Unhandled');
 var queryString = _dereq_('query-string');
 var urllite = _dereq_('urllite');
 var Cancel = _dereq_('./errors/Cancel');
@@ -41,44 +40,6 @@ Request.prototype.param = function(indexOrName) {
   return this.params[indexOrName];
 };
 
-// TODO: Update these docs!
-
-/**
- * A shortcut for invoking the callback with an `Unhandled` error in your route
- * handler. Instead of this:
- *
- *     Router.route('users/:username', function() {
- *       if (this.params.username === 'Matthew') {
- *         // Do stuff
- *       } else {
- *         throw new Router.Unhandled(this.request);
- *       }
- *    });
- *
- * or (the async version)
- *
- *     Router.route('users/:username', function(done) {
- *       if (this.params.username === 'Matthew') {
- *         // Do stuff
- *       } else {
- *         done(new Router.Unhandled(this.request));
- *       }
- *    });
- *
- * You can just do this:
- *
- *     Router.route('users/:username', function() {
- *       if (this.params.username === 'Matthew') {
- *         // Do stuff
- *       } else {
- *         this.unhandled();
- *       }
- *    });
- */
-Request.prototype.unhandled = function() {
-  this.emit('error', new Unhandled(this));
-};
-
 Request.prototype.cancel = function() {
   if (!this.canceled) {
     this.canceled = true;
@@ -90,9 +51,11 @@ Request.prototype.canceled = false;
 
 module.exports = Request;
 
-},{"./errors/Cancel":5,"./errors/Unhandled":6,"inherits":15,"query-string":17,"urllite":18,"urllite/lib/extensions/toString":23,"wolfy87-eventemitter":24}],2:[function(_dereq_,module,exports){
+},{"./errors/Cancel":6,"inherits":15,"query-string":16,"urllite":17,"urllite/lib/extensions/toString":22,"wolfy87-eventemitter":23}],2:[function(_dereq_,module,exports){
 var inherits = _dereq_('inherits');
+var Unhandled = _dereq_('./errors/Unhandled');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
+var extend = _dereq_('xtend');
 
 
 /**
@@ -103,11 +66,9 @@ function Response(request, router) {
   this.request = request;
   this.router = router;
   this.state = router.state;
+  this.vars = {};
 
-  // FIXME: We shouldn't have to do this. Should `unhandled()` be on the response? Or should we have some other way to catch it?
-  request.on('error', function(err) {
-    this.emit('error', err);
-  }.bind(this));
+  request.on('cancel', this['throw'].bind(this));
 }
 
 inherits(Response, EventEmitter);
@@ -118,6 +79,14 @@ inherits(Response, EventEmitter);
 //
 //
 
+/**
+ * Update the view vars for any subsequent views rendered by this response.
+ */
+Response.prototype.setVars = function(vars) {
+  this.vars = extend(this.vars, vars);
+  return this;
+};
+
 Response.prototype.setState = function(state) {
   this.router.setState(state);
   this.state = this.router.state;
@@ -125,6 +94,7 @@ Response.prototype.setState = function(state) {
 };
 
 Response.prototype.setView = function(view) {
+  view = bindVars(view, this.vars);
   this.router.setView(view);
   this.view = this.router.view;
   return this;
@@ -166,6 +136,53 @@ Response.prototype.end = function() {
   }
 };
 
+/**
+ * A method for declaring that the router will not handle the current request.
+ * Under normal circumstances, you shouldn't use this method but instead simply
+ * call your handler's `done` callback:
+ *
+ *     Router.route('users/:username', function(req, done) {
+ *       if (this.params.username === 'Matthew') {
+ *         // Do stuff
+ *       } else {
+ *         done();
+ *       }
+ *    });
+ *
+ * This allows other middleware the opportunity to handle the request.
+ *
+ * Calling this method is the same as invoking the handler's callback with an
+ * `Unhandled` error in your route handler:
+ *
+ *     Router.route('users/:username', function() {
+ *       if (this.params.username === 'Matthew') {
+ *         // Do stuff
+ *       } else {
+ *         throw new Router.Unhandled(this.request);
+ *       }
+ *    });
+ *
+ * or (the async version)
+ *
+ *     Router.route('users/:username', function(done) {
+ *       if (this.params.username === 'Matthew') {
+ *         // Do stuff
+ *       } else {
+ *         done(new Router.Unhandled(this.request));
+ *       }
+ *    });
+ */
+Response.prototype.unhandled = function(msg) {
+  this['throw'](new Unhandled(this.request, msg));
+};
+
+Response.prototype['throw'] = function(err) {
+  if (!this.error) {
+    this.error = err;
+    this.emit('error', err);
+  }
+};
+
 //
 //
 // Metadata methods.
@@ -197,22 +214,25 @@ Response.prototype.contentType = function() {
 //
 //
 
+function bindVars(view, vars) {
+  if (vars) {
+    var oldView = view;
+    return function(extraVars) {
+      return oldView.call(this, extend(vars, extraVars));
+    };
+  }
+  return view;
+}
+
 /**
- * A function decorator that creates a new view from the provided one and the
- * (optional) remaining arguments.
+ * A function decorator that creates a render function that accepts vars (as a
+ * second argument) from one that doesn't.
  *
  * @param {function} fn The function whose arguments to transform.
  */
 function renderer(fn) {
-  return function(view) {
-    if (arguments.length > 1) {
-      var oldView = view;
-      var args = Array.prototype.slice.call(arguments, 1);
-      view = function() {
-        return oldView.apply(this, args);
-      };
-    }
-    return fn.call(this, view);
+  return function(view, vars) {
+    return fn.call(this, bindVars(view, vars));
   };
 }
 
@@ -247,14 +267,14 @@ Response.prototype.renderIntermediate = renderer(function(view) {
 
 Response.prototype.renderDocumentToString = function() {
   var engine = this.router.constructor.engine;
-  var markup = engine.renderToString(router);
+  var markup = engine.renderToString(this.router);
   var doctype = this.doctype(); // Guess from contentType if not present.
   return (doctype || '') + markup;
 };
 
 module.exports = Response;
 
-},{"inherits":15,"wolfy87-eventemitter":24}],3:[function(_dereq_,module,exports){
+},{"./errors/Unhandled":7,"inherits":15,"wolfy87-eventemitter":23,"xtend":24}],3:[function(_dereq_,module,exports){
 // The Route object is responsible for compiling route patterns and matching
 // them against paths. The syntax of route patterns is based on Backbone's,
 // though ours tracks param names so they can be used to look up matched values
@@ -351,21 +371,20 @@ var Route = _dereq_('./Route');
 var Request = _dereq_('./Request');
 var Response = _dereq_('./Response');
 var Unhandled = _dereq_('./errors/Unhandled');
-var once = _dereq_('once');
 var delayed = _dereq_('./utils/delayed');
 var getDefaultHistory = _dereq_('./history/getHistory');
 var invokeHandlers = _dereq_('./utils/invokeHandlers');
 var noop = _dereq_('./utils/noop');
 var inherits = _dereq_('inherits');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
-var renderInto = _dereq_('./renderInto');
+var attach = _dereq_('./attach');
 var urllite = _dereq_('urllite');
 _dereq_('urllite/lib/extensions/resolve');
 _dereq_('urllite/lib/extensions/toString');
 
 
-function Router() {
-  this.state = {};
+function Router(opts) {
+  this.state = extend(opts && opts.initialState);
 }
 
 inherits(Router, EventEmitter);
@@ -413,15 +432,10 @@ Router.route = function() {
 
   // Create and register a middleware to represent this route.
   RouterClass.use(function(req, next) {
-    // Only one route should handle any given request.
-    if (req.handled) return next();
-
     // If this route doesn't match, skip it.
     var match = route.match(req.path);
     if (!match) return next();
 
-    // A match! Mark the request as handled and store the params.
-    req.handled = true;
     req.params = match;
 
     invokeHandlers(handlers, req, this, next);
@@ -445,8 +459,19 @@ Router.prototype.render = function() {
   if (!this.view) {
     throw new Error('You must set a view before rendering');
   }
-  return this.view({routerState: this.state});
+  return this.view(extend(this.state));
 };
+
+Router.prototype.finalMiddleware = [
+  // If we've exhausted the middleware without handling the request, call the
+  // `unhandled()` method. Going through `unhandled` instead of just creating an
+  // error in the dispatch callback means we're always going through the same
+  // process, getting the same events, etc.
+  function(req, next) {
+    if (!this.error && !this.ended) return this.unhandled();
+    next();
+  }
+];
 
 /**
  *
@@ -461,29 +486,37 @@ Router.prototype.dispatch = function(url, opts, callback) {
     opts = null;
   }
 
+  // Wrap the callback, imposing a delay to force asynchronousness in
+  // case the user calls it synchronously.
+  var cb = function(err) {
+    // Clean up listeners
+    res.off('error', cb).off('end', cb);
+
+    this._currentResponse = null;
+    if (callback) callback(err, err ? null : res);
+  }.bind(this);
+
   // Resolve the URL to our root.
+  var outsideRoot;
   try {
     url = urllite(url).relativize(RouterClass.rootURL).toString();
   } catch (err) {
     // FIXME: We shouldn't really assume that this error is the "URL not within root" error.
     // Oops. This URL isn't underneath the router's rootURL.
-    return callback(new Unhandled(new Request(url, opts)));
+    outsideRoot = true;
   }
-
-  // Wrap the callback, imposing a delay to force asynchronousness in
-  // case the user calls it synchronously.
-  var cb = once(delayed(function(err) {
-    this._currentResponse = null;
-    if (!err && !req.handled)
-      err = new Unhandled(req);
-    if (callback)
-      callback(err, err ? null : res);
-  }.bind(this)));
 
   var req = new Request(url, opts);
   var res = new Response(req, this)
     .on('error', cb)
     .on('end', cb);
+
+  if (outsideRoot) {
+    delayed(function() {
+      res.unhandled('URL not within router root: ' + url);
+    })();
+    return res;
+  }
 
   if (this._currentResponse) {
     this._currentResponse.request.cancel();
@@ -492,8 +525,11 @@ Router.prototype.dispatch = function(url, opts, callback) {
 
   // Force async behavior so you have a chance to add listeners to the
   // request object.
+  var middleware = RouterClass.middleware.concat(this.finalMiddleware);
   delayed(function() {
-    invokeHandlers(RouterClass.middleware, req, res, cb);
+    invokeHandlers(middleware, req, res, function(err) {
+      if (err) res['throw'](err);
+    });
   })();
 
   return res;
@@ -530,13 +566,65 @@ Router.extend = function(opts) {
   return NewRouter;
 };
 
-Router.renderInto = function(element) {
-  return renderInto(this, element);
+Router.attach = function(element, opts) {
+  return attach(this, element, opts);
 };
 
 module.exports = Router;
 
-},{"./Request":1,"./Response":2,"./Route":3,"./errors/Unhandled":6,"./history/getHistory":10,"./renderInto":11,"./utils/delayed":12,"./utils/invokeHandlers":13,"./utils/noop":14,"inherits":15,"once":16,"urllite":18,"urllite/lib/extensions/resolve":22,"urllite/lib/extensions/toString":23,"wolfy87-eventemitter":24,"xtend":25}],5:[function(_dereq_,module,exports){
+},{"./Request":1,"./Response":2,"./Route":3,"./attach":5,"./errors/Unhandled":7,"./history/getHistory":11,"./utils/delayed":12,"./utils/invokeHandlers":13,"./utils/noop":14,"inherits":15,"urllite":17,"urllite/lib/extensions/resolve":21,"urllite/lib/extensions/toString":22,"wolfy87-eventemitter":23,"xtend":24}],5:[function(_dereq_,module,exports){
+var getDefaultHistory = _dereq_('./history/getHistory');
+
+
+/**
+ * Bootstraps the app by getting the initial state.
+ */
+function attach(Router, element, opts) {
+  if (!opts) opts = {};
+  var router = new Router({initialState: {forDOM: true}});
+  var history = opts.history || getDefaultHistory();
+
+  var render = function() {
+    Router.engine.renderInto(router, element);
+  };
+
+  var onInitialReady = function() {
+    render();
+    router
+      .on('viewChange', render)
+      .on('stateChange', render);
+
+    // Now that the view has been bootstrapped (i.e. is in its inital state), it
+    // can be updated.
+    update();
+    history.on('change', function() {
+      update();
+    });
+  };
+
+  var previousURL;
+  var update = function(isInitial) {
+    var url = history.currentURL();
+    if (url === previousURL) return;
+    previousURL = url;
+
+    // TODO: How should we handle an error here? Throw it? Log it?
+    var res = router.dispatch(url);
+
+    if (isInitial) {
+      res.once('initialReady', onInitialReady);
+    }
+  };
+
+  // Start the process.
+  update(true);
+
+  return router;
+}
+
+module.exports = attach;
+
+},{"./history/getHistory":11}],6:[function(_dereq_,module,exports){
 var initError = _dereq_('./initError');
 
 function Cancel(request) {
@@ -548,11 +636,12 @@ Cancel.prototype = Error.prototype;
 
 module.exports = Cancel;
 
-},{"./initError":7}],6:[function(_dereq_,module,exports){
+},{"./initError":8}],7:[function(_dereq_,module,exports){
 var initError = _dereq_('./initError');
 
-function Unhandled(request) {
-  initError(this, 'Unhandled', 'Path not found: ' + request.path);
+function Unhandled(request, msg) {
+  if (!msg) msg = 'Path not found: ' + request.path;
+  initError(this, 'Unhandled', msg);
   this.request = request;
 }
 
@@ -560,7 +649,7 @@ Unhandled.prototype = Error.prototype;
 
 module.exports = Unhandled;
 
-},{"./initError":7}],7:[function(_dereq_,module,exports){
+},{"./initError":8}],8:[function(_dereq_,module,exports){
 function initError(error, name, msg) {
   var source = new Error(msg);
   error.name = source.name = name;
@@ -577,18 +666,16 @@ function initError(error, name, msg) {
 
 module.exports = initError;
 
-},{}],8:[function(_dereq_,module,exports){
+},{}],9:[function(_dereq_,module,exports){
 var Router = _dereq_('./Router');
 
 function monorouter(opts) {
   return Router.extend(opts);
 }
 
-monorouter.renderInto = _dereq_('./renderInto');
-
 module.exports = monorouter;
 
-},{"./Router":4,"./renderInto":11}],9:[function(_dereq_,module,exports){
+},{"./Router":4}],10:[function(_dereq_,module,exports){
 var inherits = _dereq_('inherits');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
 var urllite = _dereq_ ('urllite');
@@ -628,7 +715,7 @@ if (history && history.pushState) {
 
 module.exports = History;
 
-},{"inherits":15,"urllite":18,"wolfy87-eventemitter":24}],10:[function(_dereq_,module,exports){
+},{"inherits":15,"urllite":17,"wolfy87-eventemitter":23}],11:[function(_dereq_,module,exports){
 var History = _dereq_('./History');
 
 var singleton;
@@ -641,60 +728,11 @@ function getHistory() {
 
 module.exports = getHistory;
 
-},{"./History":9}],11:[function(_dereq_,module,exports){
-var getDefaultHistory = _dereq_('./history/getHistory');
+},{"./History":10}],12:[function(_dereq_,module,exports){
+var delay = typeof setImmediate === 'function' ? setImmediate : function(fn) {
+  setTimeout(fn, 0);
+};
 
-
-/**
- * Bootstraps the app by getting the initial state.
- */
-function renderInto(Router, element, opts) {
-  if (!opts) opts = {};
-  var router = new Router();
-  var history = opts.history || getDefaultHistory();
-
-  var render = function() {
-    Router.engine.renderInto(router, element);
-  };
-
-  var onInitialReady = function() {
-    render();
-    router
-      .on('viewChange', render)
-      .on('stateChange', render);
-
-    // Now that the view has been bootstrapped (i.e. is in its inital state), it
-    // can be updated.
-    update();
-    history.on('change', function() {
-      update();
-    });
-  };
-
-  var previousURL;
-  var update = function(isInitial) {
-    var url = history.currentURL();
-    if (url === previousURL) return;
-    previousURL = url;
-
-    var res = router.dispatch(url, function(err) {
-      res.off('initialReady', onInitialReady);
-    });
-
-    if (isInitial) {
-      res.once('initialReady', onInitialReady);
-    }
-  };
-
-  // Start the process.
-  update(true);
-
-  return router;
-}
-
-module.exports = renderInto;
-
-},{"./history/getHistory":10}],12:[function(_dereq_,module,exports){
 /**
  * Creates a delayed version of the provided function. This is used to guarantee
  * ansynchronous behavior for potentially synchronous operations.
@@ -706,36 +744,31 @@ function delayed(fn) {
     var fnWithArgs = function() {
       fn.apply(self, args);
     };
-    setTimeout(fnWithArgs, 0);
+    delay(fnWithArgs);
   };
 }
 
 module.exports = delayed;
 
 },{}],13:[function(_dereq_,module,exports){
-// TODO: Add a timeout.
-
 /**
  * Invoke each handler in turn until the list is exhausted or the request has
  * been ended.
  */
 function invokeHandlers(handlers, req, res, callback) {
   var nextHandler = handlers[0];
-  var remaining = handlers.slice(1);
-
-  var next = function(err) {
-    if (err) {
-      callback(err);
-    } else if (res.ended) {
-      // The request has finished; we're done.
-      callback();
-    } else {
-      // Call the remaining handlers.
-      invokeHandlers(remaining, req, res, callback);
-    }
-  };
 
   if (nextHandler) {
+    var remaining = handlers.slice(1);
+    var next = function(err) {
+      if (err) {
+        callback(err);
+      } else {
+        // Call the remaining handlers.
+        invokeHandlers(remaining, req, res, callback);
+      }
+    };
+
     try {
       nextHandler.call(res, req, next);
     } catch (err) {
@@ -777,28 +810,6 @@ if (typeof Object.create === 'function') {
 }
 
 },{}],16:[function(_dereq_,module,exports){
-module.exports = once
-
-once.proto = once(function () {
-  Object.defineProperty(Function.prototype, 'once', {
-    value: function () {
-      return once(this)
-    },
-    configurable: true
-  })
-})
-
-function once (fn) {
-  var f = function () {
-    if (f.called) return f.value
-    f.called = true
-    return f.value = fn.apply(this, arguments)
-  }
-  f.called = false
-  return f
-}
-
-},{}],17:[function(_dereq_,module,exports){
 /*!
 	query-string
 	Parse and stringify URL query strings
@@ -866,7 +877,7 @@ function once (fn) {
 	}
 })();
 
-},{}],18:[function(_dereq_,module,exports){
+},{}],17:[function(_dereq_,module,exports){
 (function() {
   var urllite;
 
@@ -884,7 +895,7 @@ function once (fn) {
 
 }).call(this);
 
-},{"./core":19,"./extensions/normalize":20,"./extensions/relativize":21,"./extensions/resolve":22,"./extensions/toString":23}],19:[function(_dereq_,module,exports){
+},{"./core":18,"./extensions/normalize":19,"./extensions/relativize":20,"./extensions/resolve":21,"./extensions/toString":22}],18:[function(_dereq_,module,exports){
 (function() {
   var URL, URL_PATTERN, defaults, urllite,
     __hasProp = {}.hasOwnProperty,
@@ -967,7 +978,7 @@ function once (fn) {
 
 }).call(this);
 
-},{}],20:[function(_dereq_,module,exports){
+},{}],19:[function(_dereq_,module,exports){
 (function() {
   var URL, urllite;
 
@@ -991,7 +1002,7 @@ function once (fn) {
 
 }).call(this);
 
-},{"../core":19}],21:[function(_dereq_,module,exports){
+},{"../core":18}],20:[function(_dereq_,module,exports){
 (function() {
   var URL, urllite;
 
@@ -1042,7 +1053,7 @@ function once (fn) {
 
 }).call(this);
 
-},{"../core":19,"./resolve":22}],22:[function(_dereq_,module,exports){
+},{"../core":18,"./resolve":21}],21:[function(_dereq_,module,exports){
 (function() {
   var URL, copyProps, oldParse, urllite,
     __slice = [].slice;
@@ -1100,7 +1111,7 @@ function once (fn) {
 
 }).call(this);
 
-},{"../core":19,"./normalize":20}],23:[function(_dereq_,module,exports){
+},{"../core":18,"./normalize":19}],22:[function(_dereq_,module,exports){
 (function() {
   var URL, urllite;
 
@@ -1118,7 +1129,7 @@ function once (fn) {
 
 }).call(this);
 
-},{"../core":19}],24:[function(_dereq_,module,exports){
+},{"../core":18}],23:[function(_dereq_,module,exports){
 /*!
  * EventEmitter v4.2.6 - git.io/ee
  * Oliver Caldwell
@@ -1592,7 +1603,7 @@ function once (fn) {
 	}
 }.call(this));
 
-},{}],25:[function(_dereq_,module,exports){
+},{}],24:[function(_dereq_,module,exports){
 module.exports = extend
 
 function extend() {
@@ -1611,6 +1622,6 @@ function extend() {
     return target
 }
 
-},{}]},{},[8])
-(8)
+},{}]},{},[9])
+(9)
 });

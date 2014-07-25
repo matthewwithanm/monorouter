@@ -8,7 +8,6 @@
   },
   "dependencies": {
     "urllite": "~0.4.2",
-    "once": "~1.3.0",
     "query-string": "~0.4.0",
     "wolfy87-eventemitter": "~4.2.6",
     "inherits": "~2.0.1",

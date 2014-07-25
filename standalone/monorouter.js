@@ -1,4 +1,84 @@
 !function(e){if("object"==typeof exports)module.exports=e();else if("function"==typeof define&&define.amd)define(e);else{var o;"undefined"!=typeof window?o=window:"undefined"!=typeof global?o=global:"undefined"!=typeof self&&(o=self),o.monorouter=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(_dereq_,module,exports){
+var urllite = _dereq_('urllite');
+_dereq_('urllite/lib/extensions/relativize');
+_dereq_('urllite/lib/extensions/toString');
+
+
+/**
+ * A utility for hijacking link clicks and forwarding them to the router.
+ */
+function LinkHijacker(router, el) {
+  this.router = router;
+  this.element = el || window;
+  this.handleClick = this.handleClick.bind(this);
+  this.start();
+}
+
+LinkHijacker.prototype.start = function() {
+  // This handler works by trying to route the URL and then, if it was
+  // successful, updating the history. If the history object being used doesn't
+  // support that, don't bother adding the event listener.
+  if (!this.router.history.push) return;
+
+  this.element.addEventListener('click', this.handleClick);
+};
+
+LinkHijacker.prototype.stop = function() {
+  this.element.removeEventListener('click', this.handleClick);
+};
+
+LinkHijacker.prototype.handleClick = function(event) {
+  // Ignore canceled events, modified clicks, and right clicks.
+  if (event.defaultPrevented) return;
+  if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+  if (event.button !== 0) return;
+
+  // Get the <a> element.
+  var el = event.target;
+  while (el && el.nodeName !== 'A') {
+    el = el.parentNode;
+  }
+
+  // Ignore clicks from non-a elements.
+  if (!el) return;
+
+  // Ignore the click if the element has a target.
+  if (el.target && el.target !== '_self') return;
+
+  // Ignore the click if it's a download link. (We use this method of
+  // detecting the presence of the attribute for old IE versions.)
+  if (!!el.attributes.download) return;
+
+  // Use a regular expression to parse URLs instead of relying on the browser
+  // to do it for us (because IE).
+  var url = urllite(el.href);
+  var windowURL = urllite(window.location.href);
+
+  // Ignore links that don't share a protocol and host with ours.
+  if (url.protocol !== windowURL.protocol || url.host !== windowURL.host)
+    return;
+
+  // Ignore 'rel="external"' links.
+  if (el.rel && /(?:^|\s+)external(?:\s+|$)/.test(el.rel)) return;
+
+  event.preventDefault();
+
+  // Dispatch the URL.
+  var fullPath = url.pathname + url.search + url.hash;
+  this.router.dispatch(fullPath, function(err, res) {
+    if (err) {
+      // There was an error. Fall back to following the link.
+      window.location = url.toString();
+    } else {
+      // Update the history.
+      this.router.history.push(fullPath);
+    }
+  }.bind(this));
+};
+
+module.exports = LinkHijacker;
+
+},{"urllite":20,"urllite/lib/extensions/relativize":23,"urllite/lib/extensions/toString":25}],2:[function(_dereq_,module,exports){
 var queryString = _dereq_('query-string');
 var urllite = _dereq_('urllite');
 var Cancel = _dereq_('./errors/Cancel');
@@ -51,7 +131,7 @@ Request.prototype.canceled = false;
 
 module.exports = Request;
 
-},{"./errors/Cancel":6,"inherits":15,"query-string":16,"urllite":17,"urllite/lib/extensions/toString":22,"wolfy87-eventemitter":23}],2:[function(_dereq_,module,exports){
+},{"./errors/Cancel":7,"inherits":18,"query-string":19,"urllite":20,"urllite/lib/extensions/toString":25,"wolfy87-eventemitter":26}],3:[function(_dereq_,module,exports){
 var inherits = _dereq_('inherits');
 var Unhandled = _dereq_('./errors/Unhandled');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
@@ -274,7 +354,7 @@ Response.prototype.renderDocumentToString = function() {
 
 module.exports = Response;
 
-},{"./errors/Unhandled":7,"inherits":15,"wolfy87-eventemitter":23,"xtend":24}],3:[function(_dereq_,module,exports){
+},{"./errors/Unhandled":8,"inherits":18,"wolfy87-eventemitter":26,"xtend":27}],4:[function(_dereq_,module,exports){
 // The Route object is responsible for compiling route patterns and matching
 // them against paths. The syntax of route patterns is based on Backbone's,
 // though ours tracks param names so they can be used to look up matched values
@@ -365,7 +445,7 @@ Route.prototype.match = function(path) {
 
 module.exports = Route;
 
-},{}],4:[function(_dereq_,module,exports){
+},{}],5:[function(_dereq_,module,exports){
 var extend = _dereq_('xtend');
 var Route = _dereq_('./Route');
 var Request = _dereq_('./Request');
@@ -373,18 +453,22 @@ var Response = _dereq_('./Response');
 var Unhandled = _dereq_('./errors/Unhandled');
 var delayed = _dereq_('./utils/delayed');
 var getDefaultHistory = _dereq_('./history/getHistory');
-var invokeHandlers = _dereq_('./utils/invokeHandlers');
+var series = _dereq_('./utils/series');
 var noop = _dereq_('./utils/noop');
 var inherits = _dereq_('inherits');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
 var attach = _dereq_('./attach');
 var urllite = _dereq_('urllite');
+var LinkHijacker = _dereq_('./LinkHijacker');
 _dereq_('urllite/lib/extensions/resolve');
 _dereq_('urllite/lib/extensions/toString');
 
 
 function Router(opts) {
-  this.state = extend(opts && opts.initialState);
+  if (opts) {
+    this.state = extend(opts.initialState);
+    this.history = opts.history;
+  }
 }
 
 inherits(Router, EventEmitter);
@@ -438,7 +522,7 @@ Router.route = function() {
 
     req.params = match;
 
-    invokeHandlers(handlers, req, this, next);
+    series(handlers, this, [req], next);
   });
 
   // For chaining!
@@ -527,12 +611,16 @@ Router.prototype.dispatch = function(url, opts, callback) {
   // request object.
   var middleware = RouterClass.middleware.concat(this.finalMiddleware);
   delayed(function() {
-    invokeHandlers(middleware, req, res, function(err) {
+    series(middleware, res, [req], function(err) {
       if (err) res['throw'](err);
     });
   })();
 
   return res;
+};
+
+Router.prototype.captureClicks = function(el) {
+  return new LinkHijacker(this, el);
 };
 
 Router.use = function(middleware) {
@@ -543,11 +631,11 @@ Router.use = function(middleware) {
 
 Router.extend = function(opts) {
   var SuperClass = this;
-  var NewRouter = function() {
+  var NewRouter = function(opts) {
     if (!(this instanceof NewRouter)) {
-      return new NewRouter();
+      return new NewRouter(opts);
     }
-    SuperClass.call(this);
+    SuperClass.call(this, opts);
   };
   inherits(NewRouter, SuperClass);
 
@@ -570,9 +658,18 @@ Router.attach = function(element, opts) {
   return attach(this, element, opts);
 };
 
+/**
+ * Extensions are just functions that mutate the router in any way they want
+ * and return it. This function is just a prettier way to use them than calling
+ * them directly.
+ */
+Router.setup = function(extension) {
+  return extension(this);
+};
+
 module.exports = Router;
 
-},{"./Request":1,"./Response":2,"./Route":3,"./attach":5,"./errors/Unhandled":7,"./history/getHistory":11,"./utils/delayed":12,"./utils/invokeHandlers":13,"./utils/noop":14,"inherits":15,"urllite":17,"urllite/lib/extensions/resolve":21,"urllite/lib/extensions/toString":22,"wolfy87-eventemitter":23,"xtend":24}],5:[function(_dereq_,module,exports){
+},{"./LinkHijacker":1,"./Request":2,"./Response":3,"./Route":4,"./attach":6,"./errors/Unhandled":8,"./history/getHistory":14,"./utils/delayed":15,"./utils/noop":16,"./utils/series":17,"inherits":18,"urllite":20,"urllite/lib/extensions/resolve":24,"urllite/lib/extensions/toString":25,"wolfy87-eventemitter":26,"xtend":27}],6:[function(_dereq_,module,exports){
 var getDefaultHistory = _dereq_('./history/getHistory');
 
 
@@ -581,8 +678,8 @@ var getDefaultHistory = _dereq_('./history/getHistory');
  */
 function attach(Router, element, opts) {
   if (!opts) opts = {};
-  var router = new Router({initialState: {forDOM: true}});
   var history = opts.history || getDefaultHistory();
+  var router = new Router({history: history, initialState: {forDOM: true}});
 
   var render = function() {
     Router.engine.renderInto(router, element);
@@ -624,7 +721,7 @@ function attach(Router, element, opts) {
 
 module.exports = attach;
 
-},{"./history/getHistory":11}],6:[function(_dereq_,module,exports){
+},{"./history/getHistory":14}],7:[function(_dereq_,module,exports){
 var initError = _dereq_('./initError');
 
 function Cancel(request) {
@@ -636,7 +733,7 @@ Cancel.prototype = Error.prototype;
 
 module.exports = Cancel;
 
-},{"./initError":8}],7:[function(_dereq_,module,exports){
+},{"./initError":9}],8:[function(_dereq_,module,exports){
 var initError = _dereq_('./initError');
 
 function Unhandled(request, msg) {
@@ -649,7 +746,7 @@ Unhandled.prototype = Error.prototype;
 
 module.exports = Unhandled;
 
-},{"./initError":8}],8:[function(_dereq_,module,exports){
+},{"./initError":9}],9:[function(_dereq_,module,exports){
 function initError(error, name, msg) {
   var source = new Error(msg);
   error.name = source.name = name;
@@ -666,7 +763,7 @@ function initError(error, name, msg) {
 
 module.exports = initError;
 
-},{}],9:[function(_dereq_,module,exports){
+},{}],10:[function(_dereq_,module,exports){
 var Router = _dereq_('./Router');
 
 function monorouter(opts) {
@@ -675,47 +772,79 @@ function monorouter(opts) {
 
 module.exports = monorouter;
 
-},{"./Router":4}],10:[function(_dereq_,module,exports){
+},{"./Router":5}],11:[function(_dereq_,module,exports){
 var inherits = _dereq_('inherits');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
 var urllite = _dereq_ ('urllite');
-var win = typeof window !== 'undefined' ? window : null;
-var history = win && win.history;
-var History;
 
 
-if (history && history.pushState) {
-  History = function() {
-    win.addEventListener('popstate', function(event) {
-      this.emit('change');
-    }.bind(this));
-  };
-} else {
-  History = function() {};
-}
+/**
+ * A history interface for browsers that don't support pushState. `navigate`
+ * simply triggers a new request to the server while `push` is left
+ * unimplemented (since the browser is incapable of updating the history to
+ * match a state after the fact).
+ */
+function FallbackHistory() {}
 
-inherits(History, EventEmitter);
+inherits(FallbackHistory, EventEmitter);
 
-History.prototype.currentURL = function() {
+FallbackHistory.prototype.currentURL = function() {
   // Use urllite to pave over IE issues with pathname.
   var parsed = urllite(document.location.href);
   return parsed.pathname + parsed.search + parsed.hash;
 };
 
-if (history && history.pushState) {
-  History.prototype.push = function(path) {
-    history.pushState({}, '', path);
+FallbackHistory.prototype.navigate = function(path) {
+  window.location = path;
+};
+
+module.exports = FallbackHistory;
+
+},{"inherits":18,"urllite":20,"wolfy87-eventemitter":26}],12:[function(_dereq_,module,exports){
+var PushStateHistory = _dereq_('./PushStateHistory');
+var FallbackHistory = _dereq_('./FallbackHistory');
+
+
+var win = typeof window !== 'undefined' ? window : null;
+var history = win && win.history;
+
+module.exports = history && history.pushState ? PushStateHistory : FallbackHistory;
+
+},{"./FallbackHistory":11,"./PushStateHistory":13}],13:[function(_dereq_,module,exports){
+var inherits = _dereq_('inherits');
+var EventEmitter = _dereq_('wolfy87-eventemitter');
+var urllite = _dereq_ ('urllite');
+
+
+/**
+ * A history implementation that uses `pushState`.
+ */
+function PushStateHistory() {
+  window.addEventListener('popstate', function(event) {
     this.emit('change');
-  };
-} else {
-  History.prototype.push = function(path) {
-    window.location = path;
-  };
+  }.bind(this));
 }
 
-module.exports = History;
+inherits(PushStateHistory, EventEmitter);
 
-},{"inherits":15,"urllite":17,"wolfy87-eventemitter":23}],11:[function(_dereq_,module,exports){
+PushStateHistory.prototype.currentURL = function() {
+  // Use urllite to pave over IE issues with pathname.
+  var parsed = urllite(document.location.href);
+  return parsed.pathname + parsed.search + parsed.hash;
+};
+
+PushStateHistory.prototype.navigate = function(path) {
+  window.history.pushState({}, '', path);
+  this.emit('change');
+};
+
+PushStateHistory.prototype.push = function(path) {
+  window.history.pushState({}, '', path);
+};
+
+module.exports = PushStateHistory;
+
+},{"inherits":18,"urllite":20,"wolfy87-eventemitter":26}],14:[function(_dereq_,module,exports){
 var History = _dereq_('./History');
 
 var singleton;
@@ -728,7 +857,7 @@ function getHistory() {
 
 module.exports = getHistory;
 
-},{"./History":10}],12:[function(_dereq_,module,exports){
+},{"./History":12}],15:[function(_dereq_,module,exports){
 var delay = typeof setImmediate === 'function' ? setImmediate : function(fn) {
   setTimeout(fn, 0);
 };
@@ -750,27 +879,29 @@ function delayed(fn) {
 
 module.exports = delayed;
 
-},{}],13:[function(_dereq_,module,exports){
-/**
- * Invoke each handler in turn until the list is exhausted or the request has
- * been ended.
- */
-function invokeHandlers(handlers, req, res, callback) {
-  var nextHandler = handlers[0];
+},{}],16:[function(_dereq_,module,exports){
+module.exports = function() {};
 
-  if (nextHandler) {
-    var remaining = handlers.slice(1);
+},{}],17:[function(_dereq_,module,exports){
+/**
+ * Invoke each in a list of functions using continuation passing.
+ */
+function series(funcs, ctx, args, callback) {
+  var nextFunc = funcs[0];
+
+  if (nextFunc) {
+    var remaining = funcs.slice(1);
     var next = function(err) {
       if (err) {
         callback(err);
       } else {
-        // Call the remaining handlers.
-        invokeHandlers(remaining, req, res, callback);
+        // Call the remaining funcs
+        series(remaining, ctx, args, callback);
       }
     };
 
     try {
-      nextHandler.call(res, req, next);
+      nextFunc.apply(ctx, args.concat(next));
     } catch (err) {
       callback(err);
     }
@@ -779,12 +910,9 @@ function invokeHandlers(handlers, req, res, callback) {
   }
 }
 
-module.exports = invokeHandlers;
+module.exports = series;
 
-},{}],14:[function(_dereq_,module,exports){
-module.exports = function() {};
-
-},{}],15:[function(_dereq_,module,exports){
+},{}],18:[function(_dereq_,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -809,7 +937,7 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],16:[function(_dereq_,module,exports){
+},{}],19:[function(_dereq_,module,exports){
 /*!
 	query-string
 	Parse and stringify URL query strings
@@ -877,7 +1005,7 @@ if (typeof Object.create === 'function') {
 	}
 })();
 
-},{}],17:[function(_dereq_,module,exports){
+},{}],20:[function(_dereq_,module,exports){
 (function() {
   var urllite;
 
@@ -895,7 +1023,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{"./core":18,"./extensions/normalize":19,"./extensions/relativize":20,"./extensions/resolve":21,"./extensions/toString":22}],18:[function(_dereq_,module,exports){
+},{"./core":21,"./extensions/normalize":22,"./extensions/relativize":23,"./extensions/resolve":24,"./extensions/toString":25}],21:[function(_dereq_,module,exports){
 (function() {
   var URL, URL_PATTERN, defaults, urllite,
     __hasProp = {}.hasOwnProperty,
@@ -978,7 +1106,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{}],19:[function(_dereq_,module,exports){
+},{}],22:[function(_dereq_,module,exports){
 (function() {
   var URL, urllite;
 
@@ -1002,7 +1130,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{"../core":18}],20:[function(_dereq_,module,exports){
+},{"../core":21}],23:[function(_dereq_,module,exports){
 (function() {
   var URL, urllite;
 
@@ -1053,7 +1181,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{"../core":18,"./resolve":21}],21:[function(_dereq_,module,exports){
+},{"../core":21,"./resolve":24}],24:[function(_dereq_,module,exports){
 (function() {
   var URL, copyProps, oldParse, urllite,
     __slice = [].slice;
@@ -1111,7 +1239,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{"../core":18,"./normalize":19}],22:[function(_dereq_,module,exports){
+},{"../core":21,"./normalize":22}],25:[function(_dereq_,module,exports){
 (function() {
   var URL, urllite;
 
@@ -1129,7 +1257,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{"../core":18}],23:[function(_dereq_,module,exports){
+},{"../core":21}],26:[function(_dereq_,module,exports){
 /*!
  * EventEmitter v4.2.6 - git.io/ee
  * Oliver Caldwell
@@ -1603,7 +1731,7 @@ if (typeof Object.create === 'function') {
 	}
 }.call(this));
 
-},{}],24:[function(_dereq_,module,exports){
+},{}],27:[function(_dereq_,module,exports){
 module.exports = extend
 
 function extend() {
@@ -1622,6 +1750,6 @@ function extend() {
     return target
 }
 
-},{}]},{},[9])
-(9)
+},{}]},{},[10])
+(10)
 });

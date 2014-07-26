@@ -153,6 +153,8 @@ function Response(request, router) {
 
 inherits(Response, EventEmitter);
 
+Response.prototype.status = 200;
+
 //
 //
 // The main methods for manipulating the application state.
@@ -277,16 +279,11 @@ Response.prototype['throw'] = function(err) {
  */
 Response.prototype.notFound = function() {
   // TODO: Should this work as a getter too? Or should we make it chainable?
-  this._notFound = true;
+  this.status = 404;
 };
 
-Response.prototype.doctype = function() {
-  return ''; // TODO: THIS!
-};
-
-Response.prototype.contentType = function() {
-  return ''; // TODO: THIS, ALSO!
-};
+Response.prototype.doctype = '<!DOCTYPE html>';
+Response.prototype.contentType = 'text/html; charset=utf-8';
 
 //
 //
@@ -348,8 +345,7 @@ Response.prototype.renderIntermediate = renderer(function(view) {
 Response.prototype.renderDocumentToString = function() {
   var engine = this.router.constructor.engine;
   var markup = engine.renderToString(this.router);
-  var doctype = this.doctype(); // Guess from contentType if not present.
-  return (doctype || '') + markup;
+  return (this.doctype || '') + markup;
 };
 
 module.exports = Response;
@@ -664,7 +660,10 @@ Router.attach = function(element, opts) {
  * them directly.
  */
 Router.setup = function(extension) {
-  return extension(this);
+  var router = extension(this);
+  if (!router)
+    throw new Error('Invalid extension: extension did not return router.')
+  return router;
 };
 
 module.exports = Router;

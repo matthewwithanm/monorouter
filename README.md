@@ -40,7 +40,7 @@ browser. Some principles of the project are:
       and the final state (which the app is in once the handling of a route is
       completed).
 4. A view is any JavaScript function that returns a DOM descriptor.
-5. Each view should represent the entire application at a given state—not just a
+5. Each view should represent the entire document at a given state—not just a
    portion of it.
    * Not only does this make reasoning about the application easier, it's very
      important when dealing with `<head>`s

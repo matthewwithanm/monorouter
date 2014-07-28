@@ -13,6 +13,52 @@ designed from the ground up to be able to route apps on both sides of the wire.
 you have any ideas for improvement!**
 
 
+Usage
+-----
+
+Defining a router looks like this:
+
+```javascript
+var monorouter = require('monorouter');
+var reactRouting = require('monorouter-react');
+
+monorouter()
+  .setup(reactRouting())
+  .route('/', function(req) {
+    this.render(MyView);
+  })
+  .route('/pets/:name/', function(req) {
+    this.render(PetView, {petName: req.params.name});
+  });
+```
+
+The router can be used on the server with express and [connect-monorouter]:
+
+```javascript
+var express = require('express');
+var router = require('./path/to/my/router');
+var monorouterMiddleware = require('connect-monorouter');
+
+var app = express();
+app.use(monorouterMiddleware(router));
+
+var server = app.listen(3000, function() {
+    console.log('Listening on port %d', server.address().port);
+});
+```
+
+And in the browser:
+
+```javascript
+router
+  .attach(document)
+  .captureClicks(); // This is optional—it uses the router to handle normal links.
+```
+
+See [the examples][monorouter examples] for a more in-depth look and more
+tricks!
+
+
 Philosophy
 ----------
 
@@ -61,3 +107,6 @@ browser. Some principles of the project are:
 [Django]: https://github.com/django/django
 [Rails]: https://github.com/rails/rails
 [react-router-component]: https://github.com/andreypopp/react-router-component
+[connect-monorouter]: https://github.com/matthewwithanm/connect-monorouter
+[monorouter-react]: https://github.com/matthewwithanm/monorouter-react
+[monorouter examples]: https://github.com/matthewwithanm/monorouter/tree/master/examples

@@ -1,6 +1,5 @@
 !function(e){if("object"==typeof exports)module.exports=e();else if("function"==typeof define&&define.amd)define(e);else{var o;"undefined"!=typeof window?o=window:"undefined"!=typeof global?o=global:"undefined"!=typeof self&&(o=self),o.monorouter=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(_dereq_,module,exports){
 var urllite = _dereq_('urllite');
-_dereq_('urllite/lib/extensions/relativize');
 _dereq_('urllite/lib/extensions/toString');
 
 
@@ -78,7 +77,7 @@ LinkHijacker.prototype.handleClick = function(event) {
 
 module.exports = LinkHijacker;
 
-},{"urllite":20,"urllite/lib/extensions/relativize":23,"urllite/lib/extensions/toString":25}],2:[function(_dereq_,module,exports){
+},{"urllite":20,"urllite/lib/extensions/toString":25}],2:[function(_dereq_,module,exports){
 var queryString = _dereq_('query-string');
 var urllite = _dereq_('urllite');
 var Cancel = _dereq_('./errors/Cancel');
@@ -162,25 +161,39 @@ Response.prototype.status = 200;
 //
 
 /**
+ * A function decorator used to prevent methods from having any effect if the
+ * corresponding request has been canceled. This prevents you from having to
+ * check if the request was cancled every time you do something async in your
+ * handler (however, if you're doing a lot of work, you should do an explicit
+ * check and opt out of it).
+ */
+function unlessCanceled(fn) {
+  return function() {
+    if (this.request.canceled) return this;
+    return fn.apply(this, arguments);
+  };
+}
+
+/**
  * Update the view vars for any subsequent views rendered by this response.
  */
-Response.prototype.setVars = function(vars) {
+Response.prototype.setVars = unlessCanceled(function(vars) {
   this.vars = extend(this.vars, vars);
   return this;
-};
+});
 
-Response.prototype.setState = function(state) {
+Response.prototype.setState = unlessCanceled(function(state) {
   this.router.setState(state);
   this.state = this.router.state;
   return this;
-};
+});
 
-Response.prototype.setView = function(view) {
+Response.prototype.setView = unlessCanceled(function(view) {
   view = bindVars(view, this.vars);
   this.router.setView(view);
   this.view = this.router.view;
   return this;
-};
+});
 
 //
 //
@@ -351,97 +364,42 @@ Response.prototype.renderDocumentToString = function() {
 module.exports = Response;
 
 },{"./errors/Unhandled":8,"inherits":18,"wolfy87-eventemitter":26,"xtend":27}],4:[function(_dereq_,module,exports){
-// The Route object is responsible for compiling route patterns and matching
-// them against paths. The syntax of route patterns is based on Backbone's,
-// though ours tracks param names so they can be used to look up matched values
-// later.
+var pathToRegexp = _dereq_('./utils/pathToRegexp');
 
-var OPTIONAL_PARAM = /\((.*?)\)/g,
-  PARAM = /((\(\?)?:(\w+))|(?:\*(\w+))/g,
-  ESCAPE_REGEXP = /[\-{}\[\]+?.,\\\^$|#\s]/g;
 
-var Route = function(path) {
-  // Allow "newless constructors."
-  if (!(this instanceof Route)) {
-    return new Route(path);
+function Route(path) {
+  this.path = path;
+  this.keys = [];
+  this.tokens = [];
+  this.regexp = pathToRegexp(path, this.keys, this.tokens, {strict: true});
+}
+
+Route.prototype.match = function(url) {
+  var match = url.match(this.regexp);
+  if (!match) return;
+  var matchObj = {};
+  for (var i = 1, len = match.length; i < len; i++) {
+    matchObj[i] = matchObj[this.keys[i - 1].name] = match[i];
   }
-
-  if (path == null) {
-    throw new Error('You must provide a path for each route.');
-  }
-
-  this.compilePath(path);
+  return matchObj;
 };
 
-// Convert a route to a RegExp. Lifted from Backbone.
-Route.prototype.compilePath = function(path) {
-  var addCapture, captureIndex, indexToParam, params, source;
-
-  if (path instanceof RegExp) {
-    return (this.regexp = path);
-  } else {
-    // Since not all browsers support named capture groups, we need to map
-    // group indexes to parameter names.
-    params = [];
-    captureIndex = 1;
-    indexToParam = {};
-    addCapture = function(param) {
-      if (param != null) {
-        params.push(param);
-        indexToParam[captureIndex] = param;
-      }
-      return captureIndex += 1;
-    };
-
-    source = path
-      .replace(ESCAPE_REGEXP, '\\$&')
-      .replace(OPTIONAL_PARAM, '(?:$1)?')
-
-    // We need to do all the replacements that contain capture groups in one
-    // operation so we can track the order. Otherwise, we wouldn't be able
-    // to match them with their names.
-    .replace(PARAM, function(match, isNamedParam, namedParamIsOptional, paramName, splatName) {
-      if (isNamedParam) {
-        if (namedParamIsOptional) {
-          return match;
-        } else {
-          addCapture(paramName);
-          return '([^/?]+)';
-        }
-      } else {
-        addCapture(splatName);
-        return '([^?]*?)';
-      }
-    });
-    this.regexp = RegExp('^' + source + '(?:\\?(.*))?$');
-    this.params = params;
-  }
-};
-
-// Accepts a path and returns an array containing matches. If a route with named
-// patterns was used, the matching values will be added as properties of the
-// array using those names.
-Route.prototype.match = function(path) {
-  var match = path.match(this.regexp);
-  if (match) {
-    if (this.params) {
-      var newMatch = [];
-      this.params.forEach(function(param, i) {
-        if (param) {
-          newMatch[param] = newMatch[i] = match[i + 1];
-        }
-      });
-      return newMatch;
-    } else if (match.length) {
-      return match;
+Route.prototype.url = function(params) {
+  return this.tokens.map(function(token) {
+    if (token.literal != null) return token.literal;
+    if (token.name) {
+      if (params && params[token.name] != null)
+        return token.delimiter + params[token.name];
+      else if (token.optional)
+        return '';
+      throw new Error('Missing required param "' + token.name + '"');
     }
-  }
+  }).join('');
 };
-
 
 module.exports = Route;
 
-},{}],5:[function(_dereq_,module,exports){
+},{"./utils/pathToRegexp":16}],5:[function(_dereq_,module,exports){
 var extend = _dereq_('xtend');
 var Route = _dereq_('./Route');
 var Request = _dereq_('./Request');
@@ -450,14 +408,10 @@ var Unhandled = _dereq_('./errors/Unhandled');
 var delayed = _dereq_('./utils/delayed');
 var getDefaultHistory = _dereq_('./history/getHistory');
 var series = _dereq_('./utils/series');
-var noop = _dereq_('./utils/noop');
 var inherits = _dereq_('inherits');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
 var attach = _dereq_('./attach');
-var urllite = _dereq_('urllite');
 var LinkHijacker = _dereq_('./LinkHijacker');
-_dereq_('urllite/lib/extensions/resolve');
-_dereq_('urllite/lib/extensions/toString');
 
 
 function Router(opts) {
@@ -465,6 +419,7 @@ function Router(opts) {
     this.state = extend(opts.initialState);
     this.history = opts.history;
   }
+  this.url = this.constructor.url.bind(this.constructor);
 }
 
 inherits(Router, EventEmitter);
@@ -542,7 +497,7 @@ Router.prototype.render = function() {
   return this.view(extend(this.state));
 };
 
-Router.prototype.finalMiddleware = [
+Router.finalMiddleware = [
   // If we've exhausted the middleware without handling the request, call the
   // `unhandled()` method. Going through `unhandled` instead of just creating an
   // error in the dispatch callback means we're always going through the same
@@ -577,13 +532,10 @@ Router.prototype.dispatch = function(url, opts, callback) {
   }.bind(this);
 
   // Resolve the URL to our root.
-  var outsideRoot;
-  try {
-    url = urllite(url).relativize(RouterClass.rootURL).toString();
-  } catch (err) {
-    // FIXME: We shouldn't really assume that this error is the "URL not within root" error.
-    // Oops. This URL isn't underneath the router's rootURL.
-    outsideRoot = true;
+  var outsideRoot = true;
+  if (url.slice(0, RouterClass.rootURL.length) === RouterClass.rootURL) {
+    url = url.slice(RouterClass.rootURL.length);
+    outsideRoot = false;
   }
 
   var req = new Request(url, opts);
@@ -605,7 +557,7 @@ Router.prototype.dispatch = function(url, opts, callback) {
 
   // Force async behavior so you have a chance to add listeners to the
   // request object.
-  var middleware = RouterClass.middleware.concat(this.finalMiddleware);
+  var middleware = RouterClass.middleware.concat(RouterClass.finalMiddleware);
   delayed(function() {
     series(middleware, res, [req], function(err) {
       if (err) res['throw'](err);
@@ -643,7 +595,7 @@ Router.extend = function(opts) {
   }
 
   NewRouter.engine = opts && opts.engine;
-  NewRouter.rootURL = opts && opts.rootURL || '/';
+  NewRouter.rootURL = opts && opts.rootURL || '';
   NewRouter.middleware = [];
   NewRouter.namedRoutes = {};
 
@@ -662,13 +614,20 @@ Router.attach = function(element, opts) {
 Router.setup = function(extension) {
   var router = extension(this);
   if (!router)
-    throw new Error('Invalid extension: extension did not return router.')
+    throw new Error('Invalid extension: extension did not return router.');
   return router;
+};
+
+Router.url = function(name, params) {
+  var route = this.namedRoutes[name];
+  if (!route)
+    throw new Error('There is no route named "' + name + '".');
+  return route.url(params);
 };
 
 module.exports = Router;
 
-},{"./LinkHijacker":1,"./Request":2,"./Response":3,"./Route":4,"./attach":6,"./errors/Unhandled":8,"./history/getHistory":14,"./utils/delayed":15,"./utils/noop":16,"./utils/series":17,"inherits":18,"urllite":20,"urllite/lib/extensions/resolve":24,"urllite/lib/extensions/toString":25,"wolfy87-eventemitter":26,"xtend":27}],6:[function(_dereq_,module,exports){
+},{"./LinkHijacker":1,"./Request":2,"./Response":3,"./Route":4,"./attach":6,"./errors/Unhandled":8,"./history/getHistory":14,"./utils/delayed":15,"./utils/series":17,"inherits":18,"wolfy87-eventemitter":26,"xtend":27}],6:[function(_dereq_,module,exports){
 var getDefaultHistory = _dereq_('./history/getHistory');
 
 
@@ -879,7 +838,165 @@ function delayed(fn) {
 module.exports = delayed;
 
 },{}],16:[function(_dereq_,module,exports){
-module.exports = function() {};
+// A custom version of Blake Embrey's path-to-regexp—modified in order to
+// support URL reversal.
+
+/*
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2014 Blake Embrey (hello@blakeembrey.com)
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
+/**
+ * Expose `pathtoRegexp`.
+ */
+module.exports = pathtoRegexp;
+
+var PATH_REGEXP = new RegExp([
+  // Match already escaped characters that would otherwise incorrectly appear
+  // in future matches. This allows the user to escape special characters that
+  // shouldn't be transformed.
+  '(\\\\.)',
+  // Match Express-style parameters and un-named parameters with a prefix
+  // and optional suffixes. Matches appear as:
+  //
+  // "/:test(\\d+)?" => ["/", "test", "\d+", undefined, "?"]
+  // "/route(\\d+)" => [undefined, undefined, undefined, "\d+", undefined]
+  '([\\/.])?(?:\\:(\\w+)(?:\\(((?:\\\\.|[^)])*)\\))?|\\(((?:\\\\.|[^)])*)\\))([+*?])?',
+  // Match regexp special characters that should always be escaped.
+  '([.+*?=^!:${}()[\\]|\\/])'
+].join('|'), 'g');
+
+/**
+ * Escape the capturing group by escaping special characters and meaning.
+ *
+ * @param  {String} group
+ * @return {String}
+ */
+function escapeGroup (group) {
+  return group.replace(/([=!:$\/()])/g, '\\$1');
+}
+
+/**
+ * Normalize the given path string, returning a regular expression.
+ *
+ * An empty array should be passed in, which will contain the placeholder key
+ * names. For example `/user/:id` will then contain `["id"]`.
+ *
+ * @param  {(String|RegExp|Array)} path
+ * @param  {Array}                 keys
+ * @param  {Array}                 tokens
+ * @param  {Object}                options
+ * @return {RegExp}
+ */
+function pathtoRegexp (path, keys, tokens, options) {
+  keys = keys || [];
+  tokens = tokens || [];
+  options = options || {};
+
+  var strict = options.strict;
+  var end = options.end !== false;
+  var flags = options.sensitive ? '' : 'i';
+  var index = 0;
+
+  var charIndex = 0;
+  var originalPath = path;
+
+  // Alter the path string into a usable regexp.
+  path = path.replace(PATH_REGEXP, function (match, escaped, prefix, key, capture, group, suffix, escape, offset) {
+
+    if (offset !== charIndex) {
+      tokens.push({literal: path.slice(charIndex, offset)});
+    }
+    charIndex = offset + match.length;
+
+    // Avoiding re-escaping escaped characters.
+    if (escaped) {
+      return escaped;
+    }
+
+    // Escape regexp special characters.
+    if (escape) {
+      tokens.push({literal: escape});
+      return '\\' + escape;
+    }
+
+    var repeat   = suffix === '+' || suffix === '*';
+    var optional = suffix === '?' || suffix === '*';
+
+    keys.push({
+      name:      key || index++,
+      delimiter: prefix || '/',
+      optional:  optional,
+      repeat:    repeat
+    });
+    tokens.push(keys[keys.length - 1]);
+
+    // Escape the prefix character.
+    prefix = prefix ? '\\' + prefix : '';
+
+    // Match using the custom capturing group, or fallback to capturing
+    // everything up to the next slash (or next period if the param was
+    // prefixed with a period).
+    capture = escapeGroup(capture || group || '[^' + (prefix || '\\/') + ']+?');
+
+    // Allow parameters to be repeated more than once.
+    if (repeat) {
+      capture = capture + '(?:' + prefix + capture + ')*';
+    }
+
+    // Allow a parameter to be optional.
+    if (optional) {
+      return '(?:' + prefix + '(' + capture + '))?';
+    }
+
+    // Basic parameter support.
+    return prefix + '(' + capture + ')';
+  });
+
+  // Add any unconsumed part of the string to our token list.
+  if (charIndex !== originalPath.length) {
+    tokens.push({literal: originalPath.slice(charIndex, originalPath.length)});
+  }
+
+  // Check whether the path ends in a slash as it alters some match behaviour.
+  var endsWithSlash = path[path.length - 1] === '/';
+
+  // In non-strict mode we allow an optional trailing slash in the match. If
+  // the path to match already ended with a slash, we need to remove it for
+  // consistency. The slash is only valid at the very end of a path match, not
+  // anywhere in the middle. This is important for non-ending mode, otherwise
+  // "/test/" will match "/test//route".
+  if (!strict) {
+    path = (endsWithSlash ? path.slice(0, -2) : path) + '(?:\\/(?=$))?';
+  }
+
+  // In non-ending mode, we need prompt the capturing groups to match as much
+  // as possible by using a positive lookahead for the end or next path segment.
+  if (!end) {
+    path += strict && endsWithSlash ? '' : '(?=\\/|$)';
+  }
+
+  return new RegExp('^' + path + (end ? '$' : ''), flags);
+}
 
 },{}],17:[function(_dereq_,module,exports){
 /**

@@ -773,6 +773,16 @@ var inherits = _dereq_('inherits');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
 var urllite = _dereq_ ('urllite');
 
+// FIXME: Currently `navigate` and `push` are identical (in this
+// implementation). The only different is one of intent—`push` is meant to
+// update the history to reflect a navigation that has already taken place,
+// while `navigate` is meant to change the history and trigger a navigation (a
+// la Backbone's `{trigger: true}`). Because we provide no way for the listener
+// to differentiate between them, we're relying on them to filter out repeats.
+// Instead, we should indicate somehow that these events are different. Ideally,
+// it would not be a simple boolean, however, because multiple routers could be
+// using the same history object, in which case the triggerer should change
+// while the other should not.
 
 /**
  * A history implementation that uses `pushState`.
@@ -798,6 +808,7 @@ PushStateHistory.prototype.navigate = function(path) {
 
 PushStateHistory.prototype.push = function(path) {
   window.history.pushState({}, '', path);
+  this.emit('change');
 };
 
 module.exports = PushStateHistory;

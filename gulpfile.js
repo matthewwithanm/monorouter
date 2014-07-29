@@ -4,10 +4,7 @@ var
   browserify = require('gulp-browserify'),
   rename = require('gulp-rename'),
   gbump = require('gulp-bump'),
-  jasmine = require('jasmine-runner-node'),
-  webpack = require('webpack'),
-  examplesWebpackConfig = require('./examples/webpack.config');
-
+  jasmine = require('jasmine-runner-node');
 
 gulp.task('watch', function() {
   gulp.watch('./lib/**/*', ['build:browser']);
@@ -23,7 +20,6 @@ gulp.task('bump:major', function() { bump('major'); });
 gulp.task('bump:minor', function() { bump('minor'); });
 gulp.task('bump:patch', function() { bump('patch'); });
 
-
 gulp.task('build:browser', function() {
   gulp.src('./lib/index.js')
     .pipe(browserify({
@@ -33,15 +29,6 @@ gulp.task('build:browser', function() {
     .pipe(rename('monorouter.js'))
     .pipe(gulp.dest('./standalone/'));
 });
-
-
-gulp.task('build:examples', function() {
-  webpack(examplesWebpackConfig).run(function(err, stats) {
-    if (err) throw err;
-    console.log(stats.toString({colors: true, chunks: false}));
-  });
-});
-
 
 gulp.task('build:tests', function() {
   gulp.src('./lib/**/__tests__/*.js')
@@ -55,14 +42,6 @@ gulp.task('build:tests', function() {
 gulp.task('watch:tests', function() {
   gulp.watch('./lib/**/*', ['build:tests']);
 });
-
-gulp.task('watch:examples', function () {
-  webpack(examplesWebpackConfig).watch(200, function(err, stats) {
-    if (err) throw err;
-    console.log(stats.toString({colors: true, chunks: false}));
-  });
-});
-
 
 gulp.task('test', ['build:tests'], function() {
   jasmine.start({

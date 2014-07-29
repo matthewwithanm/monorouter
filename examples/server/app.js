@@ -24,43 +24,26 @@ var PetDetail = React.createClass({
   render: function() {
     return (
       <div className="PetDetail">
-        <h1>{this.props.pet.name}</h1>
+        <h1>{this.props.petName}</h1>
         <a href="/">See all pets!</a>
       </div>
     );
   }
 });
 
-var App = React.createClass({
-  getDefaultProps: function() {
-    return {pets: pets};
-  },
-  renderBody: function() {
-    var petName = this.props.petName;
-    if (petName) {
-      var pet;
-      this.props.pets.some(function(p) {
-        if (matches = p.name.toLowerCase() == petName) pet = p;
-        return matches;
-      });
-      return <PetDetail pet={pet} />
-    } else {
-     return <PetList pets={this.props.pets} />
-    }
-  },
-  render: function() {
-    return (
-      <html>
-        <head>
-          <title>Server Example</title>
-        </head>
-        <body>
-          {this.renderBody()}
-          <script type="text/javascript" src="/browser.js"></script>
-        </body>
-      </html>
-    );
-  }
-});
+var App = function(children) {
+  return (
+    <html>
+      <head>
+        <title>Server Example</title>
+      </head>
+      <body>
+        {children}
+        <script type="text/javascript" src="/browser.js"></script>
+      </body>
+    </html>
+  );
+};
+
 
 module.exports = App;

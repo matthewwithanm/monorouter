@@ -56,6 +56,7 @@ var App = React.createClass({
         </head>
         <body>
           {this.renderBody()}
+          <script type="text/javascript" src="/browser.js"></script>
         </body>
       </html>
     );

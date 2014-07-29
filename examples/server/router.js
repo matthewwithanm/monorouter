@@ -1,15 +1,13 @@
 var monorouter = require('../../lib');
-var App = require('../build/server');
+var App = require('./app');
+var reactRouting = require('monorouter-react');
 
 
 module.exports = monorouter()
-  .route('index', '', function(req) {
-    console.log('routing...');
+  .setup(reactRouting())
+  .route('index', '/', function(req) {
     this.render(App);
   })
-  .route('pet', 'pet/:name', function(req) {
-    this
-      .setView(App)
-      .setState({petName: req.params.name})
-      .end();
+  .route('pet', '/pet/:name', function(req) {
+    this.render(App, {petName: req.params.name});
   });

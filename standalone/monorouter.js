@@ -67,6 +67,7 @@ LinkHijacker.prototype.handleClick = function(event) {
   this.router.dispatch(fullPath, function(err, res) {
     if (err) {
       // There was an error. Fall back to following the link.
+      if (window.console && window.console.error) window.console.error(err);
       window.location = url.toString();
     } else {
       // Update the history.
@@ -663,8 +664,9 @@ function attach(Router, element, opts) {
     if (url === previousURL) return;
     previousURL = url;
 
-    // TODO: How should we handle an error here? Throw it? Log it?
-    var res = router.dispatch(url);
+    var res = router.dispatch(url, function(err) {
+      if (err.name !== 'Unhandled') throw err;
+    });
 
     if (isInitial) {
       res.once('initialReady', onInitialReady);
@@ -1124,7 +1126,7 @@ if (typeof Object.create === 'function') {
 	};
 
 	if (typeof define === 'function' && define.amd) {
-		define([], queryString);
+		define(function() { return queryString; });
 	} else if (typeof module !== 'undefined' && module.exports) {
 		module.exports = queryString;
 	} else {

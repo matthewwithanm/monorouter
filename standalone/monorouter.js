@@ -78,7 +78,7 @@ LinkHijacker.prototype.handleClick = function(event) {
 
 module.exports = LinkHijacker;
 
-},{"urllite":20,"urllite/lib/extensions/toString":25}],2:[function(_dereq_,module,exports){
+},{"urllite":21,"urllite/lib/extensions/toString":26}],2:[function(_dereq_,module,exports){
 var queryString = _dereq_('query-string');
 var urllite = _dereq_('urllite');
 var Cancel = _dereq_('./errors/Cancel');
@@ -131,11 +131,14 @@ Request.prototype.canceled = false;
 
 module.exports = Request;
 
-},{"./errors/Cancel":7,"inherits":18,"query-string":19,"urllite":20,"urllite/lib/extensions/toString":25,"wolfy87-eventemitter":26}],3:[function(_dereq_,module,exports){
+},{"./errors/Cancel":7,"inherits":19,"query-string":20,"urllite":21,"urllite/lib/extensions/toString":26,"wolfy87-eventemitter":27}],3:[function(_dereq_,module,exports){
 var inherits = _dereq_('inherits');
 var Unhandled = _dereq_('./errors/Unhandled');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
 var extend = _dereq_('xtend');
+var noop = _dereq_('./utils/noop');
+var delayed = _dereq_('./utils/delayed');
+var series = _dereq_('./utils/series');
 
 
 /**
@@ -147,6 +150,7 @@ function Response(request, router) {
   this.router = router;
   this.state = router.state;
   this.vars = {};
+  this._beforeRenderHooks = [];
 
   request.on('cancel', this['throw'].bind(this));
 }
@@ -189,12 +193,20 @@ Response.prototype.setState = unlessCanceled(function(state) {
   return this;
 });
 
-Response.prototype.setView = unlessCanceled(function(view) {
+Response.prototype.setView = unlessCanceled(function(view, cb) {
   view = bindVars(view, this.vars);
-  this.router.setView(view);
-  this.view = this.router.view;
+  delayed(function() {
+    this.router.setView(view);
+    this.view = this.router.view;
+    cb.call(this);
+  }.bind(this))();
   return this;
 });
+
+Response.prototype.beforeRender = function(fn) {
+  this._beforeRenderHooks.push(fn);
+  return this;
+};
 
 //
 //
@@ -322,8 +334,21 @@ function bindVars(view, vars) {
  * @param {function} fn The function whose arguments to transform.
  */
 function renderer(fn) {
-  return function(view, vars) {
-    return fn.call(this, bindVars(view, vars));
+  return function(view, vars, cb) {
+    if (arguments.length === 2) {
+      if (typeof arguments[1] === 'function') {
+        cb = arguments[1];
+        vars = null;
+      }
+    }
+
+    cb = cb || noop;
+
+    var boundRender = function() {
+      fn.call(this, bindVars(view, vars), cb);
+    };
+
+    series(this._beforeRenderHooks.concat(boundRender), this, [], noop);
   };
 }
 
@@ -335,25 +360,36 @@ function renderer(fn) {
 /**
  * Render the provided view and end the request.
  */
-Response.prototype.render = renderer(function(view) {
-  this.setView(view);
-  this.end();
+Response.prototype.render = renderer(function(view, cb) {
+  this.setView(view, function(err) {
+    if (err) {
+      cb(err);
+      return;
+    }
+    cb.apply(this,  arguments);
+    this.end();
+  });
 });
 
 /**
  * Render the provided view and mark the current state as the initial one.
  */
-Response.prototype.renderInitial = renderer(function(view) {
-  this.setView(view);
-  this.request.endInitial();
-  return this.ended;
+Response.prototype.renderInitial = renderer(function(view, cb) {
+  this.setView(view, function(err) {
+    if (err) {
+      cb(err);
+      return;
+    }
+    cb.apply(this,  arguments);
+    this.endInitial();
+  });
 });
 
 /**
  * Render the provided view.
  */
-Response.prototype.renderIntermediate = renderer(function(view) {
-  this.setView(view);
+Response.prototype.renderIntermediate = renderer(function(view, cb) {
+  this.setView(view, cb);
 });
 
 Response.prototype.renderDocumentToString = function() {
@@ -364,7 +400,7 @@ Response.prototype.renderDocumentToString = function() {
 
 module.exports = Response;
 
-},{"./errors/Unhandled":8,"inherits":18,"wolfy87-eventemitter":26,"xtend":27}],4:[function(_dereq_,module,exports){
+},{"./errors/Unhandled":8,"./utils/delayed":15,"./utils/noop":16,"./utils/series":18,"inherits":19,"wolfy87-eventemitter":27,"xtend":28}],4:[function(_dereq_,module,exports){
 var pathToRegexp = _dereq_('./utils/pathToRegexp');
 
 
@@ -400,7 +436,7 @@ Route.prototype.url = function(params) {
 
 module.exports = Route;
 
-},{"./utils/pathToRegexp":16}],5:[function(_dereq_,module,exports){
+},{"./utils/pathToRegexp":17}],5:[function(_dereq_,module,exports){
 var extend = _dereq_('xtend');
 var Route = _dereq_('./Route');
 var Request = _dereq_('./Request');
@@ -628,7 +664,7 @@ Router.url = function(name, params) {
 
 module.exports = Router;
 
-},{"./LinkHijacker":1,"./Request":2,"./Response":3,"./Route":4,"./attach":6,"./errors/Unhandled":8,"./history/getHistory":14,"./utils/delayed":15,"./utils/series":17,"inherits":18,"wolfy87-eventemitter":26,"xtend":27}],6:[function(_dereq_,module,exports){
+},{"./LinkHijacker":1,"./Request":2,"./Response":3,"./Route":4,"./attach":6,"./errors/Unhandled":8,"./history/getHistory":14,"./utils/delayed":15,"./utils/series":18,"inherits":19,"wolfy87-eventemitter":27,"xtend":28}],6:[function(_dereq_,module,exports){
 var getDefaultHistory = _dereq_('./history/getHistory');
 
 
@@ -760,7 +796,7 @@ FallbackHistory.prototype.navigate = function(path) {
 
 module.exports = FallbackHistory;
 
-},{"inherits":18,"urllite":20,"wolfy87-eventemitter":26}],12:[function(_dereq_,module,exports){
+},{"inherits":19,"urllite":21,"wolfy87-eventemitter":27}],12:[function(_dereq_,module,exports){
 var PushStateHistory = _dereq_('./PushStateHistory');
 var FallbackHistory = _dereq_('./FallbackHistory');
 
@@ -815,7 +851,7 @@ PushStateHistory.prototype.push = function(path) {
 
 module.exports = PushStateHistory;
 
-},{"inherits":18,"urllite":20,"wolfy87-eventemitter":26}],14:[function(_dereq_,module,exports){
+},{"inherits":19,"urllite":21,"wolfy87-eventemitter":27}],14:[function(_dereq_,module,exports){
 var History = _dereq_('./History');
 
 var singleton;
@@ -851,6 +887,9 @@ function delayed(fn) {
 module.exports = delayed;
 
 },{}],16:[function(_dereq_,module,exports){
+module.exports = function() {};
+
+},{}],17:[function(_dereq_,module,exports){
 // A custom version of Blake Embrey's path-to-regexp—modified in order to
 // support URL reversal.
 
@@ -1011,7 +1050,7 @@ function pathtoRegexp (path, keys, tokens, options) {
   return new RegExp('^' + path + (end ? '$' : ''), flags);
 }
 
-},{}],17:[function(_dereq_,module,exports){
+},{}],18:[function(_dereq_,module,exports){
 /**
  * Invoke each in a list of functions using continuation passing.
  */
@@ -1041,7 +1080,7 @@ function series(funcs, ctx, args, callback) {
 
 module.exports = series;
 
-},{}],18:[function(_dereq_,module,exports){
+},{}],19:[function(_dereq_,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -1066,7 +1105,7 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],19:[function(_dereq_,module,exports){
+},{}],20:[function(_dereq_,module,exports){
 /*!
 	query-string
 	Parse and stringify URL query strings
@@ -1126,7 +1165,7 @@ if (typeof Object.create === 'function') {
 	};
 
 	if (typeof define === 'function' && define.amd) {
-		define(function() { return queryString; });
+		define([], queryString);
 	} else if (typeof module !== 'undefined' && module.exports) {
 		module.exports = queryString;
 	} else {
@@ -1134,7 +1173,7 @@ if (typeof Object.create === 'function') {
 	}
 })();
 
-},{}],20:[function(_dereq_,module,exports){
+},{}],21:[function(_dereq_,module,exports){
 (function() {
   var urllite;
 
@@ -1152,7 +1191,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{"./core":21,"./extensions/normalize":22,"./extensions/relativize":23,"./extensions/resolve":24,"./extensions/toString":25}],21:[function(_dereq_,module,exports){
+},{"./core":22,"./extensions/normalize":23,"./extensions/relativize":24,"./extensions/resolve":25,"./extensions/toString":26}],22:[function(_dereq_,module,exports){
 (function() {
   var URL, URL_PATTERN, defaults, urllite,
     __hasProp = {}.hasOwnProperty,
@@ -1235,7 +1274,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{}],22:[function(_dereq_,module,exports){
+},{}],23:[function(_dereq_,module,exports){
 (function() {
   var URL, urllite;
 
@@ -1259,7 +1298,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{"../core":21}],23:[function(_dereq_,module,exports){
+},{"../core":22}],24:[function(_dereq_,module,exports){
 (function() {
   var URL, urllite;
 
@@ -1310,7 +1349,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{"../core":21,"./resolve":24}],24:[function(_dereq_,module,exports){
+},{"../core":22,"./resolve":25}],25:[function(_dereq_,module,exports){
 (function() {
   var URL, copyProps, oldParse, urllite,
     __slice = [].slice;
@@ -1368,7 +1407,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{"../core":21,"./normalize":22}],25:[function(_dereq_,module,exports){
+},{"../core":22,"./normalize":23}],26:[function(_dereq_,module,exports){
 (function() {
   var URL, urllite;
 
@@ -1386,7 +1425,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{"../core":21}],26:[function(_dereq_,module,exports){
+},{"../core":22}],27:[function(_dereq_,module,exports){
 /*!
  * EventEmitter v4.2.6 - git.io/ee
  * Oliver Caldwell
@@ -1860,7 +1899,7 @@ if (typeof Object.create === 'function') {
 	}
 }.call(this));
 
-},{}],27:[function(_dereq_,module,exports){
+},{}],28:[function(_dereq_,module,exports){
 module.exports = extend
 
 function extend() {

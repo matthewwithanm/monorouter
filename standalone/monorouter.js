@@ -136,7 +136,6 @@ var inherits = _dereq_('inherits');
 var Unhandled = _dereq_('./errors/Unhandled');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
 var extend = _dereq_('xtend');
-var noop = _dereq_('./utils/noop');
 var delayed = _dereq_('./utils/delayed');
 var series = _dereq_('./utils/series');
 
@@ -342,13 +341,11 @@ function renderer(fn) {
       }
     }
 
-    cb = cb || noop;
-
-    var boundRender = function() {
-      fn.call(this, bindVars(view, vars), cb);
+    var boundRender = function(next) {
+      fn.call(this, bindVars(view, vars), next);
     };
 
-    series(this._beforeRenderHooks.concat(boundRender), this, [], noop);
+    series(this._beforeRenderHooks.concat(boundRender), this, [], cb);
   };
 }
 
@@ -400,7 +397,7 @@ Response.prototype.renderDocumentToString = function() {
 
 module.exports = Response;
 
-},{"./errors/Unhandled":8,"./utils/delayed":15,"./utils/noop":16,"./utils/series":18,"inherits":19,"wolfy87-eventemitter":27,"xtend":28}],4:[function(_dereq_,module,exports){
+},{"./errors/Unhandled":8,"./utils/delayed":15,"./utils/series":18,"inherits":19,"wolfy87-eventemitter":27,"xtend":28}],4:[function(_dereq_,module,exports){
 var pathToRegexp = _dereq_('./utils/pathToRegexp');
 
 
@@ -1051,11 +1048,14 @@ function pathtoRegexp (path, keys, tokens, options) {
 }
 
 },{}],18:[function(_dereq_,module,exports){
+var noop = _dereq_('./noop');
+
 /**
  * Invoke each in a list of functions using continuation passing.
  */
 function series(funcs, ctx, args, callback) {
   var nextFunc = funcs[0];
+  callback = callback || noop;
 
   if (nextFunc) {
     var remaining = funcs.slice(1);
@@ -1080,7 +1080,7 @@ function series(funcs, ctx, args, callback) {
 
 module.exports = series;
 
-},{}],19:[function(_dereq_,module,exports){
+},{"./noop":16}],19:[function(_dereq_,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {

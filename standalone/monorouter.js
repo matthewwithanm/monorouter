@@ -192,13 +192,8 @@ Response.prototype.setState = unlessCanceled(function(state) {
   return this;
 });
 
-Response.prototype.setView = unlessCanceled(function(view, cb) {
-  view = bindVars(view, this.vars);
-  delayed(function() {
-    this.router.setView(view);
-    this.view = this.router.view;
-    cb.call(this);
-  }.bind(this))();
+Response.prototype.setView = unlessCanceled(function(view) {
+  this.view = view;
   return this;
 });
 
@@ -333,17 +328,24 @@ function bindVars(view, vars) {
  * @param {function} fn The function whose arguments to transform.
  */
 function renderer(fn) {
-  return function(view, vars, cb) {
-    if (arguments.length === 2) {
-      if (typeof arguments[1] === 'function') {
-        cb = arguments[1];
-        vars = null;
-      }
-    }
+  return function() {
+    var view, vars, cb;
+    var args = Array.prototype.slice.call(arguments, 0);
+    if (typeof args[0] === 'function')
+      view = args.shift();
+    if (typeof args[0] === 'object')
+      vars = args.shift();
+    cb = args[0];
+
+    vars = extend(this.vars, vars);
+    view = bindVars(view || this.view, vars);
 
     var boundRender = function(next) {
-      fn.call(this, bindVars(view, vars), next);
+      // Pass a partially applied version of the view to the original function.
+      fn.call(this, view, next);
     };
+
+    if (cb) cb = cb.bind(this);
 
     series(this._beforeRenderHooks.concat(boundRender), this, [], cb);
   };
@@ -354,11 +356,18 @@ function renderer(fn) {
 // request.
 //
 
+Response.prototype._renderIntermediate = unlessCanceled(function(view, cb) {
+  delayed(function() {
+    this.router.setView(view);
+    cb.call(this);
+  }.bind(this))();
+});
+
 /**
  * Render the provided view and end the request.
  */
 Response.prototype.render = renderer(function(view, cb) {
-  this.setView(view, function(err) {
+  this._renderIntermediate(view, function(err) {
     if (err) {
       cb(err);
       return;
@@ -372,7 +381,7 @@ Response.prototype.render = renderer(function(view, cb) {
  * Render the provided view and mark the current state as the initial one.
  */
 Response.prototype.renderInitial = renderer(function(view, cb) {
-  this.setView(view, function(err) {
+  this._renderIntermediate(view, function(err) {
     if (err) {
       cb(err);
       return;
@@ -386,7 +395,7 @@ Response.prototype.renderInitial = renderer(function(view, cb) {
  * Render the provided view.
  */
 Response.prototype.renderIntermediate = renderer(function(view, cb) {
-  this.setView(view, cb);
+  this._renderIntermediate(view, cb);
 });
 
 Response.prototype.renderDocumentToString = function() {

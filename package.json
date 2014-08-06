@@ -11,7 +11,8 @@
     "query-string": "~0.4.1",
     "wolfy87-eventemitter": "~4.2.6",
     "inherits": "~2.0.1",
-    "xtend": "~3.0.0"
+    "xtend": "~3.0.0",
+    "run-series": "~1.0.2"
   },
   "devDependencies": {
     "browserify": "~3.33.0",

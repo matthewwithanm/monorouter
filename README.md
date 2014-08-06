@@ -90,9 +90,10 @@ browser. Some principles of the project are:
    portion of it.
    * Not only does this make reasoning about the application easier, it's very
      important when dealing with `<head>`s
-6. monorouter should cover all the basic functionality, but encourage extensions
-   (i.e. via middleware) and additional abstractions (i.e. JSX-friendly
-   interfaces).
+6. We think monorouter covers all the possible use cases, and we see it as a
+   foundation on which to build—both via extensions (i.e. middleware) and
+   additional abstractions (i.e. JSX-friendly interfaces and declarative,
+   lifecycle-centric route declarations).
 
 
 

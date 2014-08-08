@@ -16,6 +16,10 @@ module.exports = monorouter()
     });
   })
   .route('pet', '/pet/:name', function(req) {
+    // NOTE: Because we're calling `this.renderInitial()`, we lose the
+    // opportunity to have the server send a 404, and the client will have to
+    // display a 'missing' view. If you want the server to send 404s, you have
+    // to call `this.unhandled()` before `this.renderInitial()`.
     this.renderInitial(Preloader, function() {
       // Artificially make the next render take a while.
       setTimeout(function() {

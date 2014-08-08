@@ -2,14 +2,8 @@
 var React = require('react');
 var App = require('./App');
 
-var pets = [
-  {name: 'Winston'},
-  {name: 'Chaplin'},
-  {name: 'Bennie'}
-];
-
-function PetList() {
-  var links = pets.map(function(pet) {
+function PetList(props) {
+  var links = props.pets.map(function(pet) {
     return <li><a href={"/pet/" + pet.name.toLowerCase()}>{pet.name}</a></li>;
   });
   return (

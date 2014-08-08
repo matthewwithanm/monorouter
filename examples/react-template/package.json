@@ -1,7 +1,7 @@
 {
-  "name": "monorouter-isomorphic-example",
+  "name": "monorouter-react-template-example",
   "version": "1.0.0",
-  "description": "An example of server- and client-side routing with monorouter",
+  "description": "An example of using react-template with monorouter",
   "main": "server.js",
   "scripts": {
     "build": "webpack --config webpack.browser.config.js && webpack --config webpack.server.config.js",

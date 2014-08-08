@@ -6,9 +6,10 @@ _dereq_('urllite/lib/extensions/toString');
 /**
  * A utility for hijacking link clicks and forwarding them to the router.
  */
-function LinkHijacker(router, el) {
+function LinkHijacker(router, el, opts) {
   this.router = router;
   this.element = el || window;
+  this.blacklist = opts && opts.blacklist;
   this.handleClick = this.handleClick.bind(this);
   this.start();
 }
@@ -57,28 +58,35 @@ LinkHijacker.prototype.handleClick = function(event) {
   if (url.protocol !== windowURL.protocol || url.host !== windowURL.host)
     return;
 
+  var fullPath = url.pathname + url.search + url.hash;
+
+  // Ignore URLs that don't share the router's rootURL
+  if (fullPath.indexOf(this.router.constructor.rootURL) !== 0) return;
+
   // Ignore 'rel="external"' links.
   if (el.rel && /(?:^|\s+)external(?:\s+|$)/.test(el.rel)) return;
+
+  // Ignore any blacklisted links.
+  if (this.blacklist) {
+    for (var i = 0, len = this.blacklist.length; i < len; i++) {
+      var blacklisted = this.blacklist[i];
+
+      // The blacklist can contain strings or regexps (or anything else with a
+      // "test" function).
+      if (blacklisted === fullPath) return;
+      if (blacklisted.test && blacklisted.test(fullPath)) return;
+    }
+  }
 
   event.preventDefault();
 
   // Dispatch the URL.
-  var fullPath = url.pathname + url.search + url.hash;
-  this.router.dispatch(fullPath, function(err, res) {
-    if (err) {
-      // There was an error. Fall back to following the link.
-      if (window.console && window.console.error) window.console.error(err);
-      window.location = url.toString();
-    } else {
-      // Update the history.
-      this.router.history.push(fullPath);
-    }
-  }.bind(this));
+  this.router.history.push(fullPath);
 };
 
 module.exports = LinkHijacker;
 
-},{"urllite":21,"urllite/lib/extensions/toString":26}],2:[function(_dereq_,module,exports){
+},{"urllite":24,"urllite/lib/extensions/toString":29}],2:[function(_dereq_,module,exports){
 var queryString = _dereq_('query-string');
 var urllite = _dereq_('urllite');
 var Cancel = _dereq_('./errors/Cancel');
@@ -131,13 +139,16 @@ Request.prototype.canceled = false;
 
 module.exports = Request;
 
-},{"./errors/Cancel":7,"inherits":19,"query-string":20,"urllite":21,"urllite/lib/extensions/toString":26,"wolfy87-eventemitter":27}],3:[function(_dereq_,module,exports){
+},{"./errors/Cancel":7,"inherits":20,"query-string":21,"urllite":24,"urllite/lib/extensions/toString":29,"wolfy87-eventemitter":30}],3:[function(_dereq_,module,exports){
 var inherits = _dereq_('inherits');
 var Unhandled = _dereq_('./errors/Unhandled');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
 var extend = _dereq_('xtend');
 var delayed = _dereq_('./utils/delayed');
-var series = _dereq_('./utils/series');
+var parallel = _dereq_('run-parallel');
+var withoutResults = _dereq_('./utils/withoutResults');
+var thunkifyAll = _dereq_('./utils/thunkifyAll');
+var noop = _dereq_('./utils/noop');
 
 
 /**
@@ -300,6 +311,7 @@ Response.prototype['throw'] = function(err) {
 Response.prototype.notFound = function() {
   // TODO: Should this work as a getter too? Or should we make it chainable?
   this.status = 404;
+  return this;
 };
 
 Response.prototype.doctype = '<!DOCTYPE html>';
@@ -329,7 +341,7 @@ function bindVars(view, vars) {
  */
 function renderer(fn) {
   return function() {
-    var view, vars, cb;
+    var view, vars, cb, callback;
     var args = Array.prototype.slice.call(arguments, 0);
     if (typeof args[0] === 'function')
       view = args.shift();
@@ -344,9 +356,10 @@ function renderer(fn) {
       fn.call(this, view, next);
     };
 
-    if (cb) cb = cb.bind(this);
-
-    series(this._beforeRenderHooks.concat(boundRender), this, [], cb);
+    var hooks = thunkifyAll(this._beforeRenderHooks, this);
+    parallel(hooks, function(err) {
+      boundRender.call(this, cb || noop);
+    }.bind(this));
   };
 }
 
@@ -385,8 +398,8 @@ Response.prototype.renderInitial = renderer(function(view, cb) {
       cb(err);
       return;
     }
-    cb.apply(this,  arguments);
     this.endInitial();
+    if (!this.request.initialOnly) cb.apply(this,  arguments);
   });
 });
 
@@ -405,7 +418,7 @@ Response.prototype.renderDocumentToString = function() {
 
 module.exports = Response;
 
-},{"./errors/Unhandled":8,"./utils/delayed":15,"./utils/series":18,"inherits":19,"wolfy87-eventemitter":27,"xtend":28}],4:[function(_dereq_,module,exports){
+},{"./errors/Unhandled":8,"./utils/delayed":15,"./utils/noop":16,"./utils/thunkifyAll":18,"./utils/withoutResults":19,"inherits":20,"run-parallel":22,"wolfy87-eventemitter":30,"xtend":31}],4:[function(_dereq_,module,exports){
 var pathToRegexp = _dereq_('./utils/pathToRegexp');
 
 
@@ -449,11 +462,13 @@ var Response = _dereq_('./Response');
 var Unhandled = _dereq_('./errors/Unhandled');
 var delayed = _dereq_('./utils/delayed');
 var getDefaultHistory = _dereq_('./history/getHistory');
-var series = _dereq_('./utils/series');
+var series = _dereq_('run-series');
 var inherits = _dereq_('inherits');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
 var attach = _dereq_('./attach');
 var LinkHijacker = _dereq_('./LinkHijacker');
+var withoutResults = _dereq_('./utils/withoutResults');
+var thunkifyAll = _dereq_('./utils/thunkifyAll');
 
 
 function Router(opts) {
@@ -462,6 +477,7 @@ function Router(opts) {
     this.history = opts.history;
   }
   this.url = this.constructor.url.bind(this.constructor);
+  // TODO: Should we add the properties from the class (i.e. rootURL) to the instance?
 }
 
 inherits(Router, EventEmitter);
@@ -515,7 +531,7 @@ Router.route = function() {
 
     req.params = match;
 
-    series(handlers, this, [req], next);
+    series(thunkifyAll(handlers, this, [req]), withoutResults(next));
   });
 
   // For chaining!
@@ -601,7 +617,7 @@ Router.prototype.dispatch = function(url, opts, callback) {
   // request object.
   var middleware = RouterClass.middleware.concat(RouterClass.finalMiddleware);
   delayed(function() {
-    series(middleware, res, [req], function(err) {
+    series(thunkifyAll(middleware, res, [req]), function(err) {
       if (err) res['throw'](err);
     });
   })();
@@ -609,8 +625,8 @@ Router.prototype.dispatch = function(url, opts, callback) {
   return res;
 };
 
-Router.prototype.captureClicks = function(el) {
-  return new LinkHijacker(this, el);
+Router.prototype.captureClicks = function(el, opts) {
+  return new LinkHijacker(this, el, opts);
 };
 
 Router.use = function(middleware) {
@@ -669,7 +685,7 @@ Router.url = function(name, params) {
 
 module.exports = Router;
 
-},{"./LinkHijacker":1,"./Request":2,"./Response":3,"./Route":4,"./attach":6,"./errors/Unhandled":8,"./history/getHistory":14,"./utils/delayed":15,"./utils/series":18,"inherits":19,"wolfy87-eventemitter":27,"xtend":28}],6:[function(_dereq_,module,exports){
+},{"./LinkHijacker":1,"./Request":2,"./Response":3,"./Route":4,"./attach":6,"./errors/Unhandled":8,"./history/getHistory":14,"./utils/delayed":15,"./utils/thunkifyAll":18,"./utils/withoutResults":19,"inherits":20,"run-series":23,"wolfy87-eventemitter":30,"xtend":31}],6:[function(_dereq_,module,exports){
 var getDefaultHistory = _dereq_('./history/getHistory');
 
 
@@ -780,10 +796,7 @@ var urllite = _dereq_ ('urllite');
 
 
 /**
- * A history interface for browsers that don't support pushState. `navigate`
- * simply triggers a new request to the server while `push` is left
- * unimplemented (since the browser is incapable of updating the history to
- * match a state after the fact).
+ * A history interface for browsers that don't support pushState.
  */
 function FallbackHistory() {}
 
@@ -795,13 +808,13 @@ FallbackHistory.prototype.currentURL = function() {
   return parsed.pathname + parsed.search + parsed.hash;
 };
 
-FallbackHistory.prototype.navigate = function(path) {
+FallbackHistory.prototype.push = function(path) {
   window.location = path;
 };
 
 module.exports = FallbackHistory;
 
-},{"inherits":19,"urllite":21,"wolfy87-eventemitter":27}],12:[function(_dereq_,module,exports){
+},{"inherits":20,"urllite":24,"wolfy87-eventemitter":30}],12:[function(_dereq_,module,exports){
 var PushStateHistory = _dereq_('./PushStateHistory');
 var FallbackHistory = _dereq_('./FallbackHistory');
 
@@ -816,16 +829,6 @@ var inherits = _dereq_('inherits');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
 var urllite = _dereq_ ('urllite');
 
-// FIXME: Currently `navigate` and `push` are identical (in this
-// implementation). The only different is one of intent—`push` is meant to
-// update the history to reflect a navigation that has already taken place,
-// while `navigate` is meant to change the history and trigger a navigation (a
-// la Backbone's `{trigger: true}`). Because we provide no way for the listener
-// to differentiate between them, we're relying on them to filter out repeats.
-// Instead, we should indicate somehow that these events are different. Ideally,
-// it would not be a simple boolean, however, because multiple routers could be
-// using the same history object, in which case the triggerer should change
-// while the other should not.
 
 /**
  * A history implementation that uses `pushState`.
@@ -844,11 +847,6 @@ PushStateHistory.prototype.currentURL = function() {
   return parsed.pathname + parsed.search + parsed.hash;
 };
 
-PushStateHistory.prototype.navigate = function(path) {
-  window.history.pushState({}, '', path);
-  this.emit('change');
-};
-
 PushStateHistory.prototype.push = function(path) {
   window.history.pushState({}, '', path);
   this.emit('change');
@@ -856,7 +854,7 @@ PushStateHistory.prototype.push = function(path) {
 
 module.exports = PushStateHistory;
 
-},{"inherits":19,"urllite":21,"wolfy87-eventemitter":27}],14:[function(_dereq_,module,exports){
+},{"inherits":20,"urllite":24,"wolfy87-eventemitter":30}],14:[function(_dereq_,module,exports){
 var History = _dereq_('./History');
 
 var singleton;
@@ -1056,39 +1054,40 @@ function pathtoRegexp (path, keys, tokens, options) {
 }
 
 },{}],18:[function(_dereq_,module,exports){
-var noop = _dereq_('./noop');
-
 /**
- * Invoke each in a list of functions using continuation passing.
+ * Return thunkified versions of the provided functions bound to the specified
+ * context and with the provided initial args.
  */
-function series(funcs, ctx, args, callback) {
-  var nextFunc = funcs[0];
-  callback = callback || noop;
-
-  if (nextFunc) {
-    var remaining = funcs.slice(1);
-    var next = function(err) {
-      if (err) {
-        callback(err);
-      } else {
-        // Call the remaining funcs
-        series(remaining, ctx, args, callback);
-      }
+function thunkifyAll(fns, thisArg, args) {
+  fns = fns || [];
+  return fns.map(function(fn) {
+    return function(done) {
+      var newArgs = args || [];
+      if (arguments.length) newArgs.push.apply(newArgs, arguments);
+      newArgs.push(done);
+      fn.apply(thisArg, newArgs);
     };
+  });
+}
 
-    try {
-      nextFunc.apply(ctx, args.concat(next));
-    } catch (err) {
-      callback(err);
-    }
-  } else {
-    callback();
+module.exports = thunkifyAll;
+
+},{}],19:[function(_dereq_,module,exports){
+/**
+ * Creates a new version of a callback that doesn't get the results. This is
+ * used so that we don't forward collected results from run-series.
+ */
+function withoutResults(callback, thisArg) {
+  if (callback) {
+    return function(err, results) {
+      return callback.call(thisArg, err);
+    };
   }
 }
 
-module.exports = series;
+module.exports = withoutResults;
 
-},{"./noop":16}],19:[function(_dereq_,module,exports){
+},{}],20:[function(_dereq_,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -1113,7 +1112,7 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],20:[function(_dereq_,module,exports){
+},{}],21:[function(_dereq_,module,exports){
 /*!
 	query-string
 	Parse and stringify URL query strings
@@ -1181,7 +1180,68 @@ if (typeof Object.create === 'function') {
 	}
 })();
 
-},{}],21:[function(_dereq_,module,exports){
+},{}],22:[function(_dereq_,module,exports){
+module.exports = function (tasks, cb) {
+  var results, pending, keys
+  if (Array.isArray(tasks)) {
+    results = []
+    pending = tasks.length
+  } else {
+    keys = Object.keys(tasks)
+    results = {}
+    pending = keys.length
+  }
+
+  function done (i, err, result) {
+    results[i] = result
+    if (--pending === 0 || err) {
+      cb && cb(err, results)
+      cb = null
+    }
+  }
+
+  if (!pending) {
+    // empty
+    cb && cb(null, results)
+    cb = null
+  } else if (keys) {
+    // object
+    keys.forEach(function (key) {
+      tasks[key](done.bind(undefined, key))
+    })
+  } else {
+    // array
+    tasks.forEach(function (task, i) {
+      task(done.bind(undefined, i))
+    })
+  }
+}
+
+},{}],23:[function(_dereq_,module,exports){
+module.exports = function (tasks, cb) {
+  var current = 0
+  var results = []
+  cb = cb || function () {}
+
+  function done (err, result) {
+    if (err) return cb(err, results)
+    results.push(result)
+
+    if (++current >= tasks.length) {
+      cb(null, results)
+    } else {
+      tasks[current](done)
+    }
+  }
+
+  if (tasks.length) {
+    tasks[0](done)
+  } else {
+    cb(null, [])
+  }
+}
+
+},{}],24:[function(_dereq_,module,exports){
 (function() {
   var urllite;
 
@@ -1199,7 +1259,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{"./core":22,"./extensions/normalize":23,"./extensions/relativize":24,"./extensions/resolve":25,"./extensions/toString":26}],22:[function(_dereq_,module,exports){
+},{"./core":25,"./extensions/normalize":26,"./extensions/relativize":27,"./extensions/resolve":28,"./extensions/toString":29}],25:[function(_dereq_,module,exports){
 (function() {
   var URL, URL_PATTERN, defaults, urllite,
     __hasProp = {}.hasOwnProperty,
@@ -1282,7 +1342,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{}],23:[function(_dereq_,module,exports){
+},{}],26:[function(_dereq_,module,exports){
 (function() {
   var URL, urllite;
 
@@ -1306,7 +1366,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{"../core":22}],24:[function(_dereq_,module,exports){
+},{"../core":25}],27:[function(_dereq_,module,exports){
 (function() {
   var URL, urllite;
 
@@ -1357,7 +1417,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{"../core":22,"./resolve":25}],25:[function(_dereq_,module,exports){
+},{"../core":25,"./resolve":28}],28:[function(_dereq_,module,exports){
 (function() {
   var URL, copyProps, oldParse, urllite,
     __slice = [].slice;
@@ -1415,7 +1475,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{"../core":22,"./normalize":23}],26:[function(_dereq_,module,exports){
+},{"../core":25,"./normalize":26}],29:[function(_dereq_,module,exports){
 (function() {
   var URL, urllite;
 
@@ -1433,7 +1493,7 @@ if (typeof Object.create === 'function') {
 
 }).call(this);
 
-},{"../core":22}],27:[function(_dereq_,module,exports){
+},{"../core":25}],30:[function(_dereq_,module,exports){
 /*!
  * EventEmitter v4.2.6 - git.io/ee
  * Oliver Caldwell
@@ -1907,7 +1967,7 @@ if (typeof Object.create === 'function') {
 	}
 }.call(this));
 
-},{}],28:[function(_dereq_,module,exports){
+},{}],31:[function(_dereq_,module,exports){
 module.exports = extend
 
 function extend() {

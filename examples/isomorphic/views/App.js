@@ -5,7 +5,7 @@ function App(props, children) {
   return (
     <html>
       <head>
-        <title>Server Example</title>
+        <title>Isomorphic Example</title>
       </head>
       <body>
         {children}

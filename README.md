@@ -59,6 +59,119 @@ See [the examples][monorouter examples] for a more in-depth look and more
 tricks!
 
 
+API
+---
+
+In addition to the router itself, monorouter has two important objects. The
+first one is the request object, and it's passed as the first argument to your
+handler. The second is the context (`this`) of your route handler, and it's used
+to interface with your application's state (you can think of this as being
+similar to a Response object in server-only routers). This section summarizes
+their APIs.
+
+
+### Request
+
+- **param(name:String)**: Get the value for one of the dynamic parts of your
+  route:
+
+  ```javascript
+  monorouter()
+    .route('/pets/:name', function(req) {
+      console.log(req.param('name'));
+      // snip
+    });
+  ```
+
+- **params:Object**: A hash of the params used in your route.
+- **canceled:Boolean**: A boolean that represents whether the request has been
+  canceled. This is useful for preventing further action in async callbacks:
+
+  ```javascript
+  monorouter()
+    .route('/', function(req) {
+      http('...', function(err, result) {
+        if (req.canceled) return;
+        this.render(MyView, {person: result.people[0]});
+      }.bind(this));
+    });
+  ```
+
+  Note that it's not necessary to check this value if all you're doing is
+  rendering since those operations are no-ops when the request has been
+  canceled. The request is also an EventEmitter that emits a "cancel" event so,
+  if you'd like to take action immediately when a request is canceled (and abort
+  an XHR request, for example), you can do that:
+
+  ```javascript
+  monorouter()
+    .route('/', function(req) {
+      var xhr = http('...', function(err, result) {
+        if (req.canceled) return;
+        this.render(MyView, {person: result.people[0]});
+      }.bind(this));
+      this.on('cancel', function() {
+        xhr.abort();
+      });
+    });
+  ```
+
+- **initialOnly:Boolean**: Indicates whether the request is only for the initial
+  state of the app. `true` when rendering on the server.
+- **location:Object**: A parsed version of the requested URL, in a format based
+  on the [`document.location` interface][document.location].
+- **url:String**: The requested URL.
+- **protocol:String**: The protocol of the requested URL, without the colon.
+  e.g. `"http"`
+- **hostname:String**: The hostname of the requested URL, e.g. `'mysite.com'`
+- **host:String**: The full host of the requested URL, e.g. `'mysite.com:5000'`
+- **search:String**: The search portion of the requested URL, including the
+  question mark, e.g. `'?hello=5&goodbye=a'`
+- **querystring:String**: The search portion of the requested URL, excluding the
+  question mark, e.g. `'hello=5&goodbye=a'`
+- **query:Object**: A version of the query string that's been parsed using
+  @sindresorhus's [query-string].
+- **hash:String**: The hash portion of the requested URL, including the hash
+  mark. e.g. `'#this-is-the-hash'`
+- **fragment:String**: The hash portion of the requested URL, excluding the hash
+  mark. e.g. `'this-is-the-hash'`
+
+
+### Handler Context
+
+Within a route handler, you use properties and methods of `this` to define the
+application state. Here are some of those:
+
+**render(view:Function?, vars:Object?, callback:Function?)**: Render the view
+  and consider the request complete. The `view` is a function that returns a
+  virtual DOM instance. It may be omitted if you've previously set one for this
+  request using `setView` (e.g. in middleware). "vars" are arguments for this
+  function that will be bound to it for as long as it's rendered.
+**renderIntermediate(view:Function?, vars:Object?, callback:Function?)**: Like
+  `render`, but doesn't end the request. This is useful if you'd like to render
+  several different states during the course of handling a single route.
+**renderInitial(view:Function?, vars:Object?, callback:Function?)**: Like
+  `render`, but only ends "initialOnly" requests.
+**setView(view:Function)**: Sets the view to be rendered for this response. The
+  application won't actually be updated until/unless one of the `render*`
+  methods is called.
+**setVars(vars:Object)**: Add vars for any subsequent renders in this request.
+  "vars" are passed to the view function for rendering.
+**setState(state:Object)**: "state" is similar to vars in that its values are
+  passed to the view for rendering. Unlike "vars", however, "state" is preserved
+  between requests. Setting state also triggers a rerender of the current view.
+  The state and vars are merged and the result passed to the view function.
+**notFound()**: A function that tells the server to send a 404 status code with
+  this view.
+**doctype:String**: The doctype for the document. Defaults to the HTML5 doctype.
+**contentType:String**: The content type of the document. Defaults to
+  `'text/html; charset=utf-8'`
+**beforeRender(hook:Function)**: An interface for adding before-render hooks.
+  All hooks are executed in parallel immediately prior to rendering.
+**ended:Boolean**: Specifies whether the response has ended.
+**initialEnded:Boolean**: Specifies whether the initial state has been rendered.
+
+
 Philosophy
 ----------
 
@@ -111,3 +224,5 @@ browser. Some principles of the project are:
 [connect-monorouter]: https://github.com/matthewwithanm/connect-monorouter
 [monorouter-react]: https://github.com/matthewwithanm/monorouter-react
 [monorouter examples]: https://github.com/matthewwithanm/monorouter/tree/master/examples
+[document.location]: https://developer.mozilla.org/en-US/docs/Web/API/document.location
+[query-string]: https://github.com/sindresorhus/query-string

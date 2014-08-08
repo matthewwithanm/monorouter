@@ -6,6 +6,7 @@ module.exports = {
     server: './server.js'
   },
   externals: ['express', 'react'],
+  target: 'node',
   node: {
     console: false,
     process: false,

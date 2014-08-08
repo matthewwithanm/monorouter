@@ -32,6 +32,9 @@ monorouter()
   });
 ```
 
+Here, we're simply rendering views for two different routes. With monorouter, a
+"view" is any function that returns a DOM descriptor.
+
 The router can be used on the server with express and [connect-monorouter]:
 
 ```javascript

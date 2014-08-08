@@ -142,34 +142,35 @@ their APIs.
 Within a route handler, you use properties and methods of `this` to define the
 application state. Here are some of those:
 
-**render(view:Function?, vars:Object?, callback:Function?)**: Render the view
+- **render(view:Function?, vars:Object?, callback:Function?)**: Render the view
   and consider the request complete. The `view` is a function that returns a
   virtual DOM instance. It may be omitted if you've previously set one for this
   request using `setView` (e.g. in middleware). "vars" are arguments for this
   function that will be bound to it for as long as it's rendered.
-**renderIntermediate(view:Function?, vars:Object?, callback:Function?)**: Like
+- **renderIntermediate(view:Function?, vars:Object?, callback:Function?)**: Like
   `render`, but doesn't end the request. This is useful if you'd like to render
   several different states during the course of handling a single route.
-**renderInitial(view:Function?, vars:Object?, callback:Function?)**: Like
+- **renderInitial(view:Function?, vars:Object?, callback:Function?)**: Like
   `render`, but only ends "initialOnly" requests.
-**setView(view:Function)**: Sets the view to be rendered for this response. The
-  application won't actually be updated until/unless one of the `render*`
+- **setView(view:Function)**: Sets the view to be rendered for this response.
+  The application won't actually be updated until/unless one of the `render*`
   methods is called.
-**setVars(vars:Object)**: Add vars for any subsequent renders in this request.
+- **setVars(vars:Object)**: Add vars for any subsequent renders in this request.
   "vars" are passed to the view function for rendering.
-**setState(state:Object)**: "state" is similar to vars in that its values are
+- **setState(state:Object)**: "state" is similar to vars in that its values are
   passed to the view for rendering. Unlike "vars", however, "state" is preserved
   between requests. Setting state also triggers a rerender of the current view.
   The state and vars are merged and the result passed to the view function.
-**notFound()**: A function that tells the server to send a 404 status code with
-  this view.
-**doctype:String**: The doctype for the document. Defaults to the HTML5 doctype.
-**contentType:String**: The content type of the document. Defaults to
+- **notFound()**: A function that tells the server to send a 404 status code
+  with this view.
+- **doctype:String**: The doctype for the document. Defaults to the HTML5
+  doctype.
+- **contentType:String**: The content type of the document. Defaults to
   `'text/html; charset=utf-8'`
-**beforeRender(hook:Function)**: An interface for adding before-render hooks.
+- **beforeRender(hook:Function)**: An interface for adding before-render hooks.
   All hooks are executed in parallel immediately prior to rendering.
-**ended:Boolean**: Specifies whether the response has ended.
-**initialEnded:Boolean**: Specifies whether the initial state has been rendered.
+- **ended:Boolean**: Specifies whether the response has ended.
+- **initialEnded:Boolean**: Specifies whether the initial state has been rendered.
 
 
 Philosophy

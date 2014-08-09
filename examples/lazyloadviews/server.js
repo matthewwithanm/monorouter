@@ -6,10 +6,8 @@ var path = require('path');
 port = process.env.PORT || 5000;
 
 express()
+  .use('/assets', express.static(__dirname + '/assets'))
   .use(routerMiddleware(Router))
-  .get('/browser.js', function(req, res) {
-    res.sendfile(path.join(__dirname, 'browser.js'));
-  })
   .listen(port, function() {
     console.log("Listening on " + port + ".");
     console.log("Go to <http://localhost:" + port + "> in your browser.");

@@ -8,10 +8,10 @@ module.exports = {
 
   output: {
     filename: '[name].js',
-    path: path.join(__dirname, 'built'),
+    path: path.join(__dirname, 'built', 'assets'),
     devtool: '$@inline-source-map',
     libraryTarget: 'umd',
-    publicPath: '../built/'
+    publicPath: '/assets/'
   },
 
   module: {

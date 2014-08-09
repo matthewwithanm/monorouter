@@ -9,7 +9,7 @@ function App(props, children) {
       </head>
       <body>
         {children}
-        <script type="text/javascript" src="/browser.js"></script>
+        <script type="text/javascript" src="/assets/browser.js"></script>
       </body>
     </html>
   );

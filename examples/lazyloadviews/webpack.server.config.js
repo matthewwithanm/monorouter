@@ -17,11 +17,10 @@ module.exports = {
   },
 
   output: {
-    filename: '[name].js',
+    filename: 'server.js',
     path: path.join(__dirname, 'built'),
     devtool: '$@inline-source-map',
-    libraryTarget: 'commonjs2',
-    publicPath: '../built/'
+    libraryTarget: 'commonjs2'
   },
 
   module: {

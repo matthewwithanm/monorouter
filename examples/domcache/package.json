@@ -16,6 +16,7 @@
     "monorouter-react": "^0.2.0",
     "connect-monorouter": "^0.2.1",
     "express": "^4.7.2",
-    "webpack": "^1.3.2-beta9"
+    "webpack": "^1.3.2-beta9",
+    "jsx-loader": "~0.11.0"
   }
 }

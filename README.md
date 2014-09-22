@@ -62,6 +62,20 @@ See [the examples][monorouter examples] for a more in-depth look and more
 tricks!
 
 
+### Handling errors
+
+Error handling with monorouter is similar to [Express]—just add a middleware
+with an arity of 3:
+
+```javascript
+router.use(function(err, req, next) {
+  if (err.status === 404) {
+    this.render(My404Template);
+  }
+});
+```
+
+
 API
 ---
 

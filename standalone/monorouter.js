@@ -643,8 +643,8 @@ Router.prototype.dispatch = function(url, opts, callback) {
             }
           };
         });
-        series(errorMiddleware, function(err) {
-          if (err) res['throw'](err);
+        series(errorMiddleware, function() {
+          if (previousError) res['throw'](previousError);
         });
       }
     });

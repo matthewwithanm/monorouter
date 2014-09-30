@@ -152,6 +152,7 @@ their APIs.
   mark. e.g. `'#this-is-the-hash'`
 - **fragment:String**: The hash portion of the requested URL, excluding the hash
   mark. e.g. `'this-is-the-hash'`
+- **first:Boolean**: Is this the first request being handled by this router?
 
 
 ### Handler Context

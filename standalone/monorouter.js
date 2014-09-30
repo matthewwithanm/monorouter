@@ -60,8 +60,8 @@ LinkHijacker.prototype.handleClick = function(event) {
 
   var fullPath = url.pathname + url.search + url.hash;
 
-  // Ignore URLs that don't share the router's rootURL
-  if (fullPath.indexOf(this.router.constructor.rootURL) !== 0) return;
+  // Ignore URLs that don't share the router's rootUrl
+  if (fullPath.indexOf(this.router.constructor.rootUrl) !== 0) return;
 
   // Ignore 'rel="external"' links.
   if (el.rel && /(?:^|\s+)external(?:\s+|$)/.test(el.rel)) return;
@@ -104,11 +104,11 @@ function getUrl(url, root) {
     if (inRoot) {
       var resolvedPath = url.pathname.slice(parsedRoot.pathname.length);
       resolvedPath = resolvedPath.charAt(0) === '/' ? resolvedPath : '/' + resolvedPath;
-      return resolvedPath + url.search + url.hash;
+      return resolvedPath + url.search;
     }
     return null;
   }
-  return url.pathname + url.search + url.hash;
+  return url.pathname + url.search;
 }
 
 /**
@@ -129,7 +129,7 @@ function Request(url, opts) {
 
   this.location = parsed;
   this.url = getUrl(parsed, opts && opts.root);
-  this.originalUrl = parsed.pathname + parsed.search + parsed.hash;
+  this.originalUrl = parsed.pathname + parsed.search;
   this.path = parsed.pathname;
   this.protocol = parsed.protocol.replace(/:$/, '');
   this.hostname = parsed.hostname;
@@ -140,6 +140,7 @@ function Request(url, opts) {
   this.hash = parsed.hash;
   this.fragment = parsed.hash.replace(/^#/, '');
   this.initialOnly = opts && opts.initialOnly;
+  this.first = opts && opts.first;
 }
 
 // Make requests event emitters.
@@ -504,7 +505,7 @@ function Router(opts) {
     this.history = opts.history;
   }
   this.url = this.constructor.url.bind(this.constructor);
-  // TODO: Should we add the properties from the class (i.e. rootURL) to the instance?
+  // TODO: Should we add the properties from the class (i.e. rootUrl) to the instance?
 }
 
 inherits(Router, EventEmitter);
@@ -616,7 +617,12 @@ Router.prototype.dispatch = function(url, opts, callback) {
     if (callback) callback(err, err ? null : res);
   }.bind(this);
 
-  var req = new Request(url, extend(opts, {root: RouterClass.rootURL}));
+  var req = new Request(url, extend(opts, {
+    first: (opts && opts.first) || !this._dispatchedFirstRequest,
+    root: RouterClass.rootUrl
+  }));
+  this._dispatchedFirstRequest = true;
+
   var res = new Response(req, this)
     .on('error', cb)
     .on('end', cb);
@@ -702,7 +708,7 @@ Router.extend = function(opts) {
   }
 
   NewRouter.engine = opts && opts.engine;
-  NewRouter.rootURL = opts && opts.rootURL || '';
+  NewRouter.rootUrl = opts && opts.rootUrl || '';
   NewRouter.middleware = [];
   NewRouter.errorMiddleware = [];
   NewRouter.namedRoutes = {};
@@ -745,7 +751,7 @@ var getDefaultHistory = _dereq_('./history/getHistory');
 function attach(Router, element, opts) {
   if (!opts) opts = {};
   var history = opts.history || getDefaultHistory();
-  var router = new Router({history: history, initialState: {forDOM: true}});
+  var router = new Router({history: history});
 
   var render = function() {
     Router.engine.renderInto(router, element);

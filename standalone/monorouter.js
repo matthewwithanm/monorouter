@@ -752,7 +752,9 @@ function attach(Router, element, opts) {
     previousURL = url;
 
     var res = router.dispatch(url, function(err) {
-      if (err && err.name !== 'Unhandled') throw err;
+      if (err && (err.name !== 'Unhandled') && (err.name !== 'Cancel')) {
+        throw err;
+      }
     });
 
     if (isInitial) {

@@ -92,17 +92,44 @@ var urllite = _dereq_('urllite');
 var Cancel = _dereq_('./errors/Cancel');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
 var inherits = _dereq_('inherits');
-_dereq_('urllite/lib/extensions/toString');
+_dereq_('urllite/lib/extensions/resolve');
 
+
+function getUrl(url, root) {
+  if (root && root !== '/') {
+    var parsedRoot = urllite(root);
+    var hostsMatch = !url.host || !parsedRoot.host ||
+                     (url.host === parsedRoot.host);
+    var inRoot = hostsMatch && url.pathname.indexOf(parsedRoot.pathname) === 0;
+    if (inRoot) {
+      var resolvedPath = url.pathname.slice(parsedRoot.pathname.length);
+      resolvedPath = resolvedPath.charAt(0) === '/' ? resolvedPath : '/' + resolvedPath;
+      return resolvedPath + url.search + url.hash;
+    }
+    return null;
+  }
+  return url.pathname + url.search + url.hash;
+}
 
 /**
  * An object representing the request to be routed. This object is meant to be
  * familiar to users of server libraries like Express and koa.
  */
 function Request(url, opts) {
-  parsed = urllite(url);
+  var parsed = urllite(url);
+
+  // Make sure we have the host information.
+  if (!parsed.host) {
+    if ((typeof document !== 'undefined') && document.location) {
+      parsed = parsed.resolve(document.location.href);
+    } else {
+      throw new Error("You need to dispatch absolute URLs on the server.");
+    }
+  }
+
   this.location = parsed;
-  this.url = urllite.URL.prototype.toString.call(parsed);
+  this.url = getUrl(parsed, opts && opts.root);
+  this.originalUrl = parsed.pathname + parsed.search + parsed.hash;
   this.path = parsed.pathname;
   this.protocol = parsed.protocol.replace(/:$/, '');
   this.hostname = parsed.hostname;
@@ -139,7 +166,7 @@ Request.prototype.canceled = false;
 
 module.exports = Request;
 
-},{"./errors/Cancel":7,"inherits":20,"query-string":21,"urllite":24,"urllite/lib/extensions/toString":29,"wolfy87-eventemitter":30}],3:[function(_dereq_,module,exports){
+},{"./errors/Cancel":7,"inherits":20,"query-string":21,"urllite":24,"urllite/lib/extensions/resolve":28,"wolfy87-eventemitter":30}],3:[function(_dereq_,module,exports){
 var inherits = _dereq_('inherits');
 var Unhandled = _dereq_('./errors/Unhandled');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
@@ -589,19 +616,12 @@ Router.prototype.dispatch = function(url, opts, callback) {
     if (callback) callback(err, err ? null : res);
   }.bind(this);
 
-  // Resolve the URL to our root.
-  var outsideRoot = true;
-  if (url.slice(0, RouterClass.rootURL.length) === RouterClass.rootURL) {
-    url = url.slice(RouterClass.rootURL.length);
-    outsideRoot = false;
-  }
-
-  var req = new Request(url, opts);
+  var req = new Request(url, extend(opts, {root: RouterClass.rootURL}));
   var res = new Response(req, this)
     .on('error', cb)
     .on('end', cb);
 
-  if (outsideRoot) {
+  if (req.url == null) {
     delayed(function() {
       res.unhandled('URL not within router root: ' + url);
     })();

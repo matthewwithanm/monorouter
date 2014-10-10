@@ -81,12 +81,12 @@ LinkHijacker.prototype.handleClick = function(event) {
   event.preventDefault();
 
   // Dispatch the URL.
-  this.router.history.push(fullPath);
+  this.router.history.navigate(fullPath);
 };
 
 module.exports = LinkHijacker;
 
-},{"urllite":24,"urllite/lib/extensions/toString":29}],2:[function(_dereq_,module,exports){
+},{"urllite":25,"urllite/lib/extensions/toString":30}],2:[function(_dereq_,module,exports){
 var queryString = _dereq_('query-string');
 var urllite = _dereq_('urllite');
 var Cancel = _dereq_('./errors/Cancel');
@@ -167,7 +167,7 @@ Request.prototype.canceled = false;
 
 module.exports = Request;
 
-},{"./errors/Cancel":7,"inherits":20,"query-string":21,"urllite":24,"urllite/lib/extensions/resolve":28,"wolfy87-eventemitter":30}],3:[function(_dereq_,module,exports){
+},{"./errors/Cancel":7,"inherits":21,"query-string":22,"urllite":25,"urllite/lib/extensions/resolve":29,"wolfy87-eventemitter":31}],3:[function(_dereq_,module,exports){
 var inherits = _dereq_('inherits');
 var Unhandled = _dereq_('./errors/Unhandled');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
@@ -446,7 +446,7 @@ Response.prototype.renderDocumentToString = function() {
 
 module.exports = Response;
 
-},{"./errors/Unhandled":8,"./utils/delayed":15,"./utils/noop":16,"./utils/thunkifyAll":18,"./utils/withoutResults":19,"inherits":20,"run-parallel":22,"wolfy87-eventemitter":30,"xtend":31}],4:[function(_dereq_,module,exports){
+},{"./errors/Unhandled":8,"./utils/delayed":16,"./utils/noop":17,"./utils/thunkifyAll":19,"./utils/withoutResults":20,"inherits":21,"run-parallel":23,"wolfy87-eventemitter":31,"xtend":32}],4:[function(_dereq_,module,exports){
 var pathToRegexp = _dereq_('./utils/pathToRegexp');
 
 
@@ -482,7 +482,7 @@ Route.prototype.url = function(params) {
 
 module.exports = Route;
 
-},{"./utils/pathToRegexp":17}],5:[function(_dereq_,module,exports){
+},{"./utils/pathToRegexp":18}],5:[function(_dereq_,module,exports){
 var extend = _dereq_('xtend');
 var Route = _dereq_('./Route');
 var Request = _dereq_('./Request');
@@ -741,7 +741,7 @@ Router.url = function(name, params) {
 
 module.exports = Router;
 
-},{"./LinkHijacker":1,"./Request":2,"./Response":3,"./Route":4,"./attach":6,"./errors/Unhandled":8,"./history/getHistory":14,"./utils/delayed":15,"./utils/thunkifyAll":18,"./utils/withoutResults":19,"inherits":20,"run-series":23,"wolfy87-eventemitter":30,"xtend":31}],6:[function(_dereq_,module,exports){
+},{"./LinkHijacker":1,"./Request":2,"./Response":3,"./Route":4,"./attach":6,"./errors/Unhandled":8,"./history/getHistory":15,"./utils/delayed":16,"./utils/thunkifyAll":19,"./utils/withoutResults":20,"inherits":21,"run-series":24,"wolfy87-eventemitter":31,"xtend":32}],6:[function(_dereq_,module,exports){
 var getDefaultHistory = _dereq_('./history/getHistory');
 
 
@@ -766,7 +766,7 @@ function attach(Router, element, opts) {
     // Now that the view has been bootstrapped (i.e. is in its inital state), it
     // can be updated.
     update();
-    history.on('change', function() {
+    history.on('update', function() {
       update();
     });
   };
@@ -796,7 +796,7 @@ function attach(Router, element, opts) {
 
 module.exports = attach;
 
-},{"./history/getHistory":14}],7:[function(_dereq_,module,exports){
+},{"./history/getHistory":15}],7:[function(_dereq_,module,exports){
 var initError = _dereq_('./initError');
 
 function Cancel(request) {
@@ -850,6 +850,30 @@ module.exports = monorouter;
 },{"./Router":5}],11:[function(_dereq_,module,exports){
 var inherits = _dereq_('inherits');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
+
+
+function BaseHistory() {}
+
+// Make BaseHistory an event emitter.
+inherits(BaseHistory, EventEmitter);
+
+/**
+ * Navigate to the provided URL without creating a duplicate history entry if
+ * you're already there.
+ */
+BaseHistory.prototype.navigate = function(url) {
+    if (url !== this.currentURL()) {
+        this.push(url);
+    } else {
+        this.replace(url);
+    }
+};
+
+module.exports = BaseHistory;
+
+},{"inherits":21,"wolfy87-eventemitter":31}],12:[function(_dereq_,module,exports){
+var inherits = _dereq_('inherits');
+var BaseHistory = _dereq_('./BaseHistory');
 var urllite = _dereq_ ('urllite');
 
 
@@ -858,21 +882,34 @@ var urllite = _dereq_ ('urllite');
  */
 function FallbackHistory() {}
 
-inherits(FallbackHistory, EventEmitter);
+inherits(FallbackHistory, BaseHistory);
 
 FallbackHistory.prototype.currentURL = function() {
+  // If we have our own idea of the URL, use that.
+  if (this._url) return this._url;
+
   // Use urllite to pave over IE issues with pathname.
   var parsed = urllite(document.location.href);
   return parsed.pathname + parsed.search + parsed.hash;
 };
 
 FallbackHistory.prototype.push = function(path) {
+  // No need to update `this._url`—this code is all going to be reloaded.
   window.location = path;
+};
+
+FallbackHistory.prototype.replace = function(path) {
+  // For the fallback history, `replace` won't actually change the browser
+  // address, but will update its own URL. This is because `replace` usually
+  // corresponds to "lesser" state changes: having a stale browser URL is
+  // considered more acceptable than refreshing the entire page.
+  this._url = path;
+  this.emit('update');
 };
 
 module.exports = FallbackHistory;
 
-},{"inherits":20,"urllite":24,"wolfy87-eventemitter":30}],12:[function(_dereq_,module,exports){
+},{"./BaseHistory":11,"inherits":21,"urllite":25}],13:[function(_dereq_,module,exports){
 var PushStateHistory = _dereq_('./PushStateHistory');
 var FallbackHistory = _dereq_('./FallbackHistory');
 
@@ -882,9 +919,9 @@ var history = win && win.history;
 
 module.exports = history && history.pushState ? PushStateHistory : FallbackHistory;
 
-},{"./FallbackHistory":11,"./PushStateHistory":13}],13:[function(_dereq_,module,exports){
+},{"./FallbackHistory":12,"./PushStateHistory":14}],14:[function(_dereq_,module,exports){
 var inherits = _dereq_('inherits');
-var EventEmitter = _dereq_('wolfy87-eventemitter');
+var BaseHistory = _dereq_('./BaseHistory');
 var urllite = _dereq_ ('urllite');
 
 
@@ -893,11 +930,11 @@ var urllite = _dereq_ ('urllite');
  */
 function PushStateHistory() {
   window.addEventListener('popstate', function(event) {
-    this.emit('change');
+    this.emit('update');
   }.bind(this));
 }
 
-inherits(PushStateHistory, EventEmitter);
+inherits(PushStateHistory, BaseHistory);
 
 PushStateHistory.prototype.currentURL = function() {
   // Use urllite to pave over IE issues with pathname.
@@ -907,12 +944,17 @@ PushStateHistory.prototype.currentURL = function() {
 
 PushStateHistory.prototype.push = function(path) {
   window.history.pushState({}, '', path);
-  this.emit('change');
+  this.emit('update');
+};
+
+PushStateHistory.prototype.replace = function(path) {
+  window.history.replaceState({}, '', path);
+  this.emit('update');
 };
 
 module.exports = PushStateHistory;
 
-},{"inherits":20,"urllite":24,"wolfy87-eventemitter":30}],14:[function(_dereq_,module,exports){
+},{"./BaseHistory":11,"inherits":21,"urllite":25}],15:[function(_dereq_,module,exports){
 var History = _dereq_('./History');
 
 var singleton;
@@ -925,7 +967,7 @@ function getHistory() {
 
 module.exports = getHistory;
 
-},{"./History":12}],15:[function(_dereq_,module,exports){
+},{"./History":13}],16:[function(_dereq_,module,exports){
 var delay = typeof setImmediate === 'function' ? setImmediate : function(fn) {
   setTimeout(fn, 0);
 };
@@ -947,10 +989,10 @@ function delayed(fn) {
 
 module.exports = delayed;
 
-},{}],16:[function(_dereq_,module,exports){
+},{}],17:[function(_dereq_,module,exports){
 module.exports = function() {};
 
-},{}],17:[function(_dereq_,module,exports){
+},{}],18:[function(_dereq_,module,exports){
 // A custom version of Blake Embrey's path-to-regexp—modified in order to
 // support URL reversal.
 
@@ -1111,7 +1153,7 @@ function pathtoRegexp (path, keys, tokens, options) {
   return new RegExp('^' + path + (end ? '$' : ''), flags);
 }
 
-},{}],18:[function(_dereq_,module,exports){
+},{}],19:[function(_dereq_,module,exports){
 /**
  * Return thunkified versions of the provided functions bound to the specified
  * context and with the provided initial args.
@@ -1133,7 +1175,7 @@ function thunkifyAll(fns, thisArg, args) {
 
 module.exports = thunkifyAll;
 
-},{}],19:[function(_dereq_,module,exports){
+},{}],20:[function(_dereq_,module,exports){
 /**
  * Creates a new version of a callback that doesn't get the results. This is
  * used so that we don't forward collected results from run-series.
@@ -1148,7 +1190,7 @@ function withoutResults(callback, thisArg) {
 
 module.exports = withoutResults;
 
-},{}],20:[function(_dereq_,module,exports){
+},{}],21:[function(_dereq_,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -1173,7 +1215,7 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],21:[function(_dereq_,module,exports){
+},{}],22:[function(_dereq_,module,exports){
 /*!
 	query-string
 	Parse and stringify URL query strings
@@ -1233,7 +1275,7 @@ if (typeof Object.create === 'function') {
 	};
 
 	if (typeof define === 'function' && define.amd) {
-		define([], queryString);
+		define(function() { return queryString; });
 	} else if (typeof module !== 'undefined' && module.exports) {
 		module.exports = queryString;
 	} else {
@@ -1241,7 +1283,7 @@ if (typeof Object.create === 'function') {
 	}
 })();
 
-},{}],22:[function(_dereq_,module,exports){
+},{}],23:[function(_dereq_,module,exports){
 module.exports = function (tasks, cb) {
   var results, pending, keys
   if (Array.isArray(tasks)) {
@@ -1278,7 +1320,7 @@ module.exports = function (tasks, cb) {
   }
 }
 
-},{}],23:[function(_dereq_,module,exports){
+},{}],24:[function(_dereq_,module,exports){
 module.exports = function (tasks, cb) {
   var current = 0
   var results = []
@@ -1302,7 +1344,7 @@ module.exports = function (tasks, cb) {
   }
 }
 
-},{}],24:[function(_dereq_,module,exports){
+},{}],25:[function(_dereq_,module,exports){
 (function() {
   var urllite;
 
@@ -1320,7 +1362,7 @@ module.exports = function (tasks, cb) {
 
 }).call(this);
 
-},{"./core":25,"./extensions/normalize":26,"./extensions/relativize":27,"./extensions/resolve":28,"./extensions/toString":29}],25:[function(_dereq_,module,exports){
+},{"./core":26,"./extensions/normalize":27,"./extensions/relativize":28,"./extensions/resolve":29,"./extensions/toString":30}],26:[function(_dereq_,module,exports){
 (function() {
   var URL, URL_PATTERN, defaults, urllite,
     __hasProp = {}.hasOwnProperty,
@@ -1403,7 +1445,7 @@ module.exports = function (tasks, cb) {
 
 }).call(this);
 
-},{}],26:[function(_dereq_,module,exports){
+},{}],27:[function(_dereq_,module,exports){
 (function() {
   var URL, urllite;
 
@@ -1427,7 +1469,7 @@ module.exports = function (tasks, cb) {
 
 }).call(this);
 
-},{"../core":25}],27:[function(_dereq_,module,exports){
+},{"../core":26}],28:[function(_dereq_,module,exports){
 (function() {
   var URL, urllite;
 
@@ -1478,7 +1520,7 @@ module.exports = function (tasks, cb) {
 
 }).call(this);
 
-},{"../core":25,"./resolve":28}],28:[function(_dereq_,module,exports){
+},{"../core":26,"./resolve":29}],29:[function(_dereq_,module,exports){
 (function() {
   var URL, copyProps, oldParse, urllite,
     __slice = [].slice;
@@ -1515,7 +1557,7 @@ module.exports = function (tasks, cb) {
   };
 
   URL.prototype.resolve = function(base) {
-    var p;
+    var p, prefix;
     if (this.isAbsolute) {
       return new urllite.URL(this);
     }
@@ -1529,14 +1571,14 @@ module.exports = function (tasks, cb) {
     } else if (this.isAbsolutePathRelative || this.isPathRelative) {
       copyProps(p, this, 'search', 'hash');
       copyProps(p, base, 'protocol', 'username', 'password', 'host', 'hostname', 'port');
-      p.pathname = this.isPathRelative ? base.pathname.slice(0, -1) === '/' ? "" + base.pathname + "/" + this.pathname : "" + (base.pathname.split('/').slice(0, -1).join('/')) + "/" + this.pathname : this.pathname;
+      p.pathname = this.isPathRelative ? base.pathname.slice(0, -1) === '/' ? "" + base.pathname + "/" + this.pathname : (prefix = base.pathname.split('/').slice(0, -1).join('/'), prefix ? "" + prefix + "/" + this.pathname : this.pathname) : this.pathname;
     }
     return urllite._createURL(p).normalize();
   };
 
 }).call(this);
 
-},{"../core":25,"./normalize":26}],29:[function(_dereq_,module,exports){
+},{"../core":26,"./normalize":27}],30:[function(_dereq_,module,exports){
 (function() {
   var URL, urllite;
 
@@ -1554,7 +1596,7 @@ module.exports = function (tasks, cb) {
 
 }).call(this);
 
-},{"../core":25}],30:[function(_dereq_,module,exports){
+},{"../core":26}],31:[function(_dereq_,module,exports){
 /*!
  * EventEmitter v4.2.6 - git.io/ee
  * Oliver Caldwell
@@ -2028,7 +2070,7 @@ module.exports = function (tasks, cb) {
 	}
 }.call(this));
 
-},{}],31:[function(_dereq_,module,exports){
+},{}],32:[function(_dereq_,module,exports){
 module.exports = extend
 
 function extend() {

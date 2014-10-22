@@ -153,6 +153,18 @@ their APIs.
 - **fragment:String**: The hash portion of the requested URL, excluding the hash
   mark. e.g. `'this-is-the-hash'`
 - **first:Boolean**: Is this the first request being handled by this router?
+- **from(causes:String...):Boolean**: Check the cause of the request. Causes
+  that monorouter sends are:
+
+  * `"startup"` - When a request is triggered by the router initialization in
+    the browser.
+  * `"popstate"` - When a request is triggered by a popstate event
+  * `"link"` - When a request is triggered by a link click captured by the link
+    hijacker
+
+  You may also send custom causes. For example, [connect-monorouter] uses the
+  string '"httprequest"'. Generally, causes shouldn't be used to affect routing
+  behavior—they are meant primarily for logging.
 
 
 ### Handler Context

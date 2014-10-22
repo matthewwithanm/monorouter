@@ -81,7 +81,7 @@ LinkHijacker.prototype.handleClick = function(event) {
   event.preventDefault();
 
   // Dispatch the URL.
-  this.router.history.navigate(fullPath);
+  this.router.history.navigate(fullPath, {cause: 'link'});
 };
 
 module.exports = LinkHijacker;
@@ -141,6 +141,7 @@ function Request(url, opts) {
   this.fragment = parsed.hash.replace(/^#/, '');
   this.initialOnly = opts && opts.initialOnly;
   this.first = opts && opts.first;
+  this.cause = opts && opts.cause;
 }
 
 // Make requests event emitters.
@@ -154,6 +155,22 @@ inherits(Request, EventEmitter);
  */
 Request.prototype.param = function(indexOrName) {
   return this.params[indexOrName];
+};
+
+/**
+ * Check whether the request triggered by one of the the specified causes.
+ */
+Request.prototype.from = function() {
+  var causes;
+  if (typeof arguments[0] === 'string') causes = arguments;
+  else causes = arguments[0];
+
+  if (causes && causes.length) {
+    for (var i = 0, len = causes.length; i < len; i++) {
+      if (causes[i] === this.cause) return true;
+    }
+  }
+  return false;
 };
 
 Request.prototype.cancel = function() {
@@ -617,8 +634,10 @@ Router.prototype.dispatch = function(url, opts, callback) {
     if (callback) callback(err, err ? null : res);
   }.bind(this);
 
+  var first = (opts && opts.first) || !this._dispatchedFirstRequest;
   var req = new Request(url, extend(opts, {
-    first: (opts && opts.first) || !this._dispatchedFirstRequest,
+    cause: opts && opts.cause,
+    first: first,
     root: RouterClass.rootUrl
   }));
   this._dispatchedFirstRequest = true;
@@ -766,30 +785,30 @@ function attach(Router, element, opts) {
     // Now that the view has been bootstrapped (i.e. is in its inital state), it
     // can be updated.
     update();
-    history.on('update', function() {
-      update();
+    history.on('update', function(meta) {
+      update(meta);
     });
   };
 
   var previousURL;
-  var update = function(isInitial) {
+  var update = function(meta) {
     var url = history.currentURL();
     if (url === previousURL) return;
     previousURL = url;
 
-    var res = router.dispatch(url, function(err) {
+    var res = router.dispatch(url, meta, function(err) {
       if (err && (err.name !== 'Unhandled') && (err.name !== 'Cancel')) {
         throw err;
       }
     });
 
-    if (isInitial) {
+    if (meta && meta.cause === 'startup') {
       res.once('initialReady', onInitialReady);
     }
   };
 
   // Start the process.
-  update(true);
+  update({cause: 'startup'});
 
   return router;
 }
@@ -861,11 +880,11 @@ inherits(BaseHistory, EventEmitter);
  * Navigate to the provided URL without creating a duplicate history entry if
  * you're already there.
  */
-BaseHistory.prototype.navigate = function(url) {
+BaseHistory.prototype.navigate = function(url, meta) {
     if (url !== this.currentURL()) {
-        this.push(url);
+        this.push(url, meta);
     } else {
-        this.replace(url);
+        this.replace(url, meta);
     }
 };
 
@@ -898,13 +917,13 @@ FallbackHistory.prototype.push = function(path) {
   window.location = path;
 };
 
-FallbackHistory.prototype.replace = function(path) {
+FallbackHistory.prototype.replace = function(path, meta) {
   // For the fallback history, `replace` won't actually change the browser
   // address, but will update its own URL. This is because `replace` usually
   // corresponds to "lesser" state changes: having a stale browser URL is
   // considered more acceptable than refreshing the entire page.
   this._url = path;
-  this.emit('update');
+  this.emit('update', meta);
 };
 
 module.exports = FallbackHistory;
@@ -930,7 +949,7 @@ var urllite = _dereq_ ('urllite');
  */
 function PushStateHistory() {
   window.addEventListener('popstate', function(event) {
-    this.emit('update');
+    this.emit('update', {cause: 'popstate'});
   }.bind(this));
 }
 
@@ -942,14 +961,14 @@ PushStateHistory.prototype.currentURL = function() {
   return parsed.pathname + parsed.search + parsed.hash;
 };
 
-PushStateHistory.prototype.push = function(path) {
+PushStateHistory.prototype.push = function(path, meta) {
   window.history.pushState({}, '', path);
-  this.emit('update');
+  this.emit('update', meta);
 };
 
-PushStateHistory.prototype.replace = function(path) {
+PushStateHistory.prototype.replace = function(path, meta) {
   window.history.replaceState({}, '', path);
-  this.emit('update');
+  this.emit('update', meta);
 };
 
 module.exports = PushStateHistory;

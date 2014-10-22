@@ -1,7 +1,7 @@
 {
   "name": "monorouter",
   "version": "0.10.0",
-  "description": "A React Application component",
+  "description": "An isomorphic JS router for the virtual DOM",
   "main": "./lib/index.js",
   "directories": {
     "test": "test"

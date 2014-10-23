@@ -722,6 +722,7 @@ Router.extend = function(opts) {
   // Add "static" props to the new router.
   for (var k in SuperClass) {
     if (SuperClass.hasOwnProperty(k)) {
+      if (k === 'super_' || k === 'prototype') continue;
       NewRouter[k] = SuperClass[k];
     }
   }

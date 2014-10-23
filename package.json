@@ -1,6 +1,6 @@
 {
   "name": "monorouter",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "An isomorphic JS router for the virtual DOM",
   "main": "./lib/index.js",
   "directories": {

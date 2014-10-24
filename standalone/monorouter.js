@@ -628,7 +628,8 @@ Router.prototype.dispatch = function(url, opts, callback) {
   // case the user calls it synchronously.
   var cb = function(err) {
     // Clean up listeners
-    res.off('error', cb).off('end', cb);
+    res.removeAllListeners();
+    req.removeAllListeners();
 
     this._currentResponse = null;
     if (callback) callback(err, err ? null : res);

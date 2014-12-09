@@ -127,6 +127,7 @@ function Request(url, opts) {
     }
   }
 
+  importOwnProps(this, opts);
   this.location = parsed;
   this.url = getUrl(parsed, opts && opts.root);
   this.originalUrl = parsed.pathname + parsed.search;
@@ -139,9 +140,6 @@ function Request(url, opts) {
   this.query = queryString.parse(parsed.search);
   this.hash = parsed.hash;
   this.fragment = parsed.hash.replace(/^#/, '');
-  this.initialOnly = opts && opts.initialOnly;
-  this.first = opts && opts.first;
-  this.cause = opts && opts.cause;
 }
 
 // Make requests event emitters.
@@ -183,6 +181,16 @@ Request.prototype.cancel = function() {
 Request.prototype.canceled = false;
 
 module.exports = Request;
+
+function importOwnProps(obj, src){
+  var own = {}.hasOwnProperty;
+  for (var key in src) {
+    if (own.call(src, key)) {
+      obj[key] = src[key];
+    }
+  }
+  return obj;
+}
 
 },{"./errors/Cancel":7,"inherits":21,"query-string":22,"urllite":25,"urllite/lib/extensions/resolve":29,"wolfy87-eventemitter":31}],3:[function(_dereq_,module,exports){
 var inherits = _dereq_('inherits');

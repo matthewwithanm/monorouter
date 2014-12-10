@@ -87,6 +87,7 @@ LinkHijacker.prototype.handleClick = function(event) {
 module.exports = LinkHijacker;
 
 },{"urllite":25,"urllite/lib/extensions/toString":30}],2:[function(_dereq_,module,exports){
+var extend = _dereq_('xtend/mutable');
 var queryString = _dereq_('query-string');
 var urllite = _dereq_('urllite');
 var Cancel = _dereq_('./errors/Cancel');
@@ -127,6 +128,7 @@ function Request(url, opts) {
     }
   }
 
+  extend(this, opts);
   this.location = parsed;
   this.url = getUrl(parsed, opts && opts.root);
   this.originalUrl = parsed.pathname + parsed.search;
@@ -139,9 +141,6 @@ function Request(url, opts) {
   this.query = queryString.parse(parsed.search);
   this.hash = parsed.hash;
   this.fragment = parsed.hash.replace(/^#/, '');
-  this.initialOnly = opts && opts.initialOnly;
-  this.first = opts && opts.first;
-  this.cause = opts && opts.cause;
 }
 
 // Make requests event emitters.
@@ -184,7 +183,7 @@ Request.prototype.canceled = false;
 
 module.exports = Request;
 
-},{"./errors/Cancel":7,"inherits":21,"query-string":22,"urllite":25,"urllite/lib/extensions/resolve":29,"wolfy87-eventemitter":31}],3:[function(_dereq_,module,exports){
+},{"./errors/Cancel":7,"inherits":21,"query-string":22,"urllite":25,"urllite/lib/extensions/resolve":29,"wolfy87-eventemitter":31,"xtend/mutable":33}],3:[function(_dereq_,module,exports){
 var inherits = _dereq_('inherits');
 var Unhandled = _dereq_('./errors/Unhandled');
 var EventEmitter = _dereq_('wolfy87-eventemitter');
@@ -2098,6 +2097,23 @@ function extend() {
     var target = {}
 
     for (var i = 0; i < arguments.length; i++) {
+        var source = arguments[i]
+
+        for (var key in source) {
+            if (source.hasOwnProperty(key)) {
+                target[key] = source[key]
+            }
+        }
+    }
+
+    return target
+}
+
+},{}],33:[function(_dereq_,module,exports){
+module.exports = extend
+
+function extend(target) {
+    for (var i = 1; i < arguments.length; i++) {
         var source = arguments[i]
 
         for (var key in source) {

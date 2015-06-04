@@ -16,7 +16,11 @@ module.exports = {
 
   module: {
     loaders: [
-      {test: /\.js$/, loader: 'jsx'}
+      {
+        test: /\.jsx?$/,
+        exclude: /(node_modules|bower_components)/,
+        loader: 'babel?optional[]=runtime&stage=0'
+      }
     ]
   }
 };
